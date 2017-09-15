@@ -47,7 +47,7 @@ let init = async () => {
     let tx = await transactionModel.findOne({payload: blockPayload});
 
     if(!tx)
-      return;
+    {return;}
 
     let accounts = await accountModel.find({address: {$in: [tx.to, tx.from]}});
     let balances = await Promise.map(accounts, account=>
