@@ -9,7 +9,6 @@ const config = require('../config'),
   mongoose = require('mongoose'),
   expect = require('chai').expect,
   SockJS = require('sockjs-client'),
-
   Promise = require('bluebird'),
   transactionModel = require('../models/transactionModel'),
   accountModel = require('../models/accountModel'),
@@ -20,7 +19,6 @@ const config = require('../config'),
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 describe('core/balance processor', function () {
-
 
   before(async () => {
     let provider = new Web3.providers.IpcProvider(config.web3.uri, net);
@@ -35,15 +33,13 @@ describe('core/balance processor', function () {
     return mongoose.disconnect();
   });
 
-
   it('add account (if not exist) to mongo', async () => {
     let accounts = await Promise.promisify(web3.eth.getAccounts)();
-    try{
+    try {
       await new accountModel({address: accounts[0]}).save();
-    }catch (e){}
+    } catch (e) {
+    }
   });
-
-
 
   it('send some eth and validate balance changes', async () => {
 
@@ -56,7 +52,7 @@ describe('core/balance processor', function () {
 
     expect(ctx.hash).to.be.string;
 
-    let data = await Promise.all([
+    await Promise.all([
       (async () => {
 
         let amqpInstance = await amqp.connect(config.rabbit.url);
