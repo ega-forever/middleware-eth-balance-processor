@@ -26,7 +26,6 @@
     "mocha": "^3.5.0",
     "sockjs-client": "^1.1.4",
     "webstomp-client": "^1.0.6",
-    "middleware-eth-blockprocessor": "github:chronobank/eslint-plugin-chronobank",
-
+    "middleware-eth-blockprocessor": "github:chronobank/eslint-plugin-chronobank"
   }
 }
