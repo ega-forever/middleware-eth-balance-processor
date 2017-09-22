@@ -21,8 +21,8 @@ install:
 
 before_script:
     - cd node_modules/middleware-eth-blockprocessor && npm run testrpc > /dev/null &
+    - cd node_modules/middleware-eth-blockprocessor && pm2 start index.js
     - pm2 start index.js
-    - cd ../../ && pm2 start index.js
 
 script:
   - sleep 120 && npm test -- --coverage
