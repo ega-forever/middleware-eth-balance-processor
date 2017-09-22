@@ -16,8 +16,6 @@ const config = require('../config'),
   Stomp = require('webstomp-client'),
   ctx = {};
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 describe('core/balance processor', function () {
 
   before(async () => {
