@@ -1,6 +1,5 @@
 const config = require('./config'),
   mongoose = require('mongoose'),
-  transactionModel = require('./models/transactionModel'),
   accountModel = require('./models/accountModel'),
   Web3 = require('web3'),
   net = require('net'),
@@ -35,38 +34,31 @@ let init = async () => {
   }
 
   channel.consume('app_eth.balance_processor', async (data) => {
-    let blockPayload;
-    channel.ack(data);
     try {
-      blockPayload = JSON.parse(data.content.toString());
+      let blockHash = JSON.parse(data.content.toString());
+
+      let tx = await Promise.promisify(web3.eth.getTransaction)(blockHash);
+
+      let accounts = tx ? await accountModel.find({address: {$in: [tx.to, tx.from]}}) : [];
+
+      for (let account of accounts) {
+        let balance = await Promise.promisify(web3.eth.getBalance)(account.address);
+        await accountModel.update({address: account.address}, {$set: {balance: balance}})
+          .catch(() => {
+          });
+
+        await  channel.publish('events', `eth_balance.${account.address}`, new Buffer(JSON.stringify({
+          address: account.address,
+          balance: balance,
+          tx: tx
+        })));
+      }
+
     } catch (e) {
       log.error(e);
-      return;
     }
 
-    let tx = await transactionModel.findOne({payload: blockPayload});
-
-    if(!tx)
-    {return;}
-
-    let accounts = await accountModel.find({address: {$in: [tx.to, tx.from]}});
-    let balances = await Promise.map(accounts, account=>
-      Promise.promisify(web3.eth.getBalance)(account.address), {concurrency: 1});
-
-
-    accounts = accounts.map((account, i) => {
-      account.balance = balances[i];
-      return account;
-    });
-
-    await Promise.all(accounts.map(account =>
-      accountModel.update({address: account.address}, {$set: {balance: account.balance}}).catch(() => {
-      })
-    ));
-
-    await Promise.all(accounts.map(account =>
-      channel.publish('events', `eth_balance.${account.address}`, new Buffer(JSON.stringify(account.balance)))
-    ));
+    channel.ack(data);
 
   });
 
