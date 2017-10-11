@@ -26,17 +26,17 @@ let init = async () => {
 
   try {
     await channel.assertExchange('events', 'topic', {durable: false});
-    await channel.assertQueue('app_eth.balance_processor');
-    await channel.bindQueue('app_eth.balance_processor', 'events', 'eth_transaction.*');
+    await channel.assertQueue(`app_${config.rabbit.serviceName}.balance_processor`);
+    await channel.bindQueue(`app_${config.rabbit.serviceName}.balance_processor`, 'events', `${config.rabbit.serviceName}_transaction.*`);
   } catch (e) {
     log.error(e);
     channel = await conn.createChannel();
   }
 
-  channel.consume('app_eth.balance_processor', async (data) => {
+  channel.prefetch(2);
+  channel.consume(`app_${config.rabbit.serviceName}.balance_processor`, async (data) => {
     try {
       let blockHash = JSON.parse(data.content.toString());
-
       let tx = await Promise.promisify(web3.eth.getTransaction)(blockHash);
 
       let accounts = tx ? await accountModel.find({address: {$in: [tx.to, tx.from]}}) : [];
@@ -47,7 +47,7 @@ let init = async () => {
           .catch(() => {
           });
 
-        await  channel.publish('events', `eth_balance.${account.address}`, new Buffer(JSON.stringify({
+        await  channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify({
           address: account.address,
           balance: balance,
           tx: tx
