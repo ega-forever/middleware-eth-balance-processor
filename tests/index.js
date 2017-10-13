@@ -10,7 +10,6 @@ const config = require('../config'),
   expect = require('chai').expect,
   SockJS = require('sockjs-client'),
   Promise = require('bluebird'),
-  transactionModel = require('../models/transactionModel'),
   accountModel = require('../models/accountModel'),
   amqp = require('amqplib'),
   Stomp = require('webstomp-client'),
@@ -58,14 +57,14 @@ describe('core/balance processor', function () {
         let channel = await amqpInstance.createChannel();
         try {
           await channel.assertExchange('events', 'topic', {durable: false});
-          await channel.assertQueue('app_eth_test.balance');
-          await channel.bindQueue('app_eth_test.balance', 'events', 'eth_balance.*');
+          await channel.assertQueue(`app_${config.rabbit.serviceName}_test.balance`);
+          await channel.bindQueue(`app_${config.rabbit.serviceName}_test.balance`, 'events', `${config.rabbit.serviceName}_balance.*`);
         } catch (e) {
           channel = await amqpInstance.createChannel();
         }
 
         return await new Promise(res =>
-          channel.consume('app_eth_test.balance', res, {noAck: true})
+          channel.consume(`app_${config.rabbit.serviceName}_test.balance`, res, {noAck: true})
         )
 
       })(),
@@ -74,7 +73,7 @@ describe('core/balance processor', function () {
         let client = Stomp.over(ws, {heartbeat: false, debug: false});
         return await new Promise(res =>
           client.connect('guest', 'guest', () => {
-            client.subscribe('/exchange/events/eth_balance.*', res)
+            client.subscribe(`/exchange/events/${config.rabbit.serviceName}_balance.*`, res)
           })
         );
       })()
