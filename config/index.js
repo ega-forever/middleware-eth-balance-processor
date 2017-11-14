@@ -1,3 +1,9 @@
+/**
+ * Chronobank/eth-balance-processor configuration
+ * @module config
+ * @returns {Object} Configuration
+ */
+
 require('dotenv').config();
 
 const config = {
