@@ -1,8 +1,8 @@
 /**
- * Middleware service for handling user balance. 
+ * Middleware service for handling user balance.
  * Update balances for accounts, which addresses were specified
  * in received transactions from blockParser via amqp
- * 
+ *
  * @module Chronobank/eth-balance-processor
  * @requires config
  * @requires models/accountModel
@@ -10,22 +10,22 @@
 
 const config = require('./config'),
   mongoose = require('mongoose'),
-  accountModel = require('./models/accountModel'),
+  Promise = require('bluebird');
+
+mongoose.Promise = Promise;
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
+
+const accountModel = require('./models/accountModel'),
   Web3 = require('web3'),
   net = require('net'),
   bunyan = require('bunyan'),
-  Promise = require('bluebird'),
   log = bunyan.createLogger({name: 'core.balanceProcessor'}),
   amqp = require('amqplib');
 
-mongoose.Promise = Promise;
-mongoose.connect(config.mongo.uri, {useMongoClient: true});
-
-mongoose.connection.on('disconnected', function () {
+mongoose.accounts.on('disconnected', function () {
   log.error('mongo disconnected!');
   process.exit(0);
 });
-
 
 let init = async () => {
   let conn = await amqp.connect(config.rabbit.url)
@@ -58,7 +58,7 @@ let init = async () => {
   await channel.assertExchange('events', 'topic', {durable: false});
   await channel.assertQueue(`app_${config.rabbit.serviceName}.balance_processor`);
   await channel.bindQueue(`app_${config.rabbit.serviceName}.balance_processor`, 'events', `${config.rabbit.serviceName}_transaction.*`);
-  
+
   channel.prefetch(2);
 
   channel.consume(`app_${config.rabbit.serviceName}.balance_processor`, async (data) => {
