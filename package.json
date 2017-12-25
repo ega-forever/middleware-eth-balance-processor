@@ -21,12 +21,12 @@
   "description": "",
   "devDependencies": {
     "babel-eslint": "^8.0.0",
+    "chai": "^4.1.1",
     "eslint": "^4.6.1",
     "eslint-plugin-chronobank": "github:chronobank/eslint-plugin-chronobank",
-    "chai": "^4.1.1",
+    "middleware-eth-blockprocessor": "github:chronobank/middleware-eth-blockprocessor",
     "mocha": "^3.5.0",
-    "sockjs-client": "^1.1.4",
     "webstomp-client": "^1.0.6",
-    "middleware-eth-blockprocessor": "github:chronobank/middleware-eth-blockprocessor"
+    "ws": "^3.3.3"
   }
 }
