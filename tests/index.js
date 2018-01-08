@@ -1,15 +1,20 @@
 require('dotenv/config');
 
 const config = require('../config'),
-  awaitLastBlock = require('./helpers/awaitLastBlock'),
+  mongoose = require('mongoose'),
+  Promise = require('bluebird');
+
+mongoose.Promise = Promise;
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri);
+mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
+
+const awaitLastBlock = require('./helpers/awaitLastBlock'),
   net = require('net'),
   path = require('path'),
   Web3 = require('web3'),
   web3 = new Web3(),
-  mongoose = require('mongoose'),
   expect = require('chai').expect,
-  SockJS = require('sockjs-client'),
-  Promise = require('bluebird'),
+  WebSocket = require('ws'),
   accountModel = require('../models/accountModel'),
   amqp = require('amqplib'),
   Stomp = require('webstomp-client'),
@@ -20,8 +25,6 @@ describe('core/balance processor', function () {
   before(async () => {
     let provider = new Web3.providers.IpcProvider(config.web3.uri, net);
     web3.setProvider(provider);
-    mongoose.Promise = Promise;
-    mongoose.connect(config.mongo.uri, {useMongoClient: true});
 
     return await awaitLastBlock(web3);
   });
@@ -69,7 +72,7 @@ describe('core/balance processor', function () {
 
       })(),
       (async () => {
-        let ws = new SockJS('http://localhost:15674/stomp');
+        let ws = new WebSocket('ws://localhost:15674/ws');
         let client = Stomp.over(ws, {heartbeat: false, debug: false});
         return await new Promise(res =>
           client.connect('guest', 'guest', () => {
