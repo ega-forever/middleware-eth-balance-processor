@@ -18,6 +18,7 @@ const Account = new mongoose.Schema({
     required: true,
     validate: [a=>  /^(0x)?[0-9a-fA-F]{40}$/.test(a), messages.wrongAddress]
   },
+  isActive: {type: Boolean, required: true, default: true},
   balance: {type: mongoose.Schema.Types.Long, default: 0},
   created: {type: Date, required: true, default: Date.now},
   erc20token : {type: mongoose.Schema.Types.Mixed, default: {}}
