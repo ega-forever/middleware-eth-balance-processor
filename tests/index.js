@@ -26,6 +26,8 @@ const awaitLastBlock = require('./helpers/awaitLastBlock'),
   Stomp = require('webstomp-client'),
   ctx = {};
 
+let accounts;
+
 describe('core/balance processor', function () {
 
   before(async () => {
@@ -42,7 +44,7 @@ describe('core/balance processor', function () {
   });
 
   it('add account (if not exist) to mongo', async () => {
-    let accounts = await Promise.promisify(web3.eth.getAccounts)();
+    accounts = await Promise.promisify(web3.eth.getAccounts)();
     try {
       await new accountModel({address: accounts[0]}).save();
     } catch (e) {
@@ -50,8 +52,6 @@ describe('core/balance processor', function () {
   });
 
   it('send some eth and validate balance changes', async () => {
-
-    let accounts = await Promise.promisify(web3.eth.getAccounts)();
     ctx.hash = await Promise.promisify(web3.eth.sendTransaction)({
       from: accounts[0],
       to: accounts[1],
