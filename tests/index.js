@@ -76,7 +76,6 @@ describe('core/balance processor', function () {
 
         return await new Promise(res =>
           channel.consume(`app_${config.rabbit.serviceName}_test.balance`, async message => {
-            console.log('abba');
             await channel.cancel(message.fields.consumerTag);
             await channel.close();
             res();

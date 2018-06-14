@@ -3,7 +3,8 @@
  * Licensed under the AGPL Version 3 license.
  * @author Kirill Sergeev <cloudkserg11@gmail.com>
  */
-const accountModel = require('../models/accountModel');
+const accountModel = require('../models/accountModel'),
+  Promise = require('bluebird');
 
 module.exports = async (web3, address) => {
   let balance = await Promise.promisify(web3.eth.getBalance)(address);
