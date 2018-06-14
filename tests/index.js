@@ -26,11 +26,13 @@ const awaitLastBlock = require('./helpers/awaitLastBlock'),
   Stomp = require('webstomp-client'),
   ctx = {};
 
-let accounts;
+let accounts, amqpInstance;
 
 describe('core/balance processor', function () {
 
   before(async () => {
+    amqpInstance = await amqp.connect(config.rabbit.url);
+
     await accountModel.remove();
     let provider = new Web3.providers.IpcProvider(config.web3.uri, net);
     web3.setProvider(provider);
@@ -63,7 +65,6 @@ describe('core/balance processor', function () {
     await Promise.all([
       (async () => {
 
-        let amqpInstance = await amqp.connect(config.rabbit.url);
         let channel = await amqpInstance.createChannel();
         try {
           await channel.assertExchange('events', 'topic', {durable: false});
@@ -74,7 +75,12 @@ describe('core/balance processor', function () {
         }
 
         return await new Promise(res =>
-          channel.consume(`app_${config.rabbit.serviceName}_test.balance`, res, {noAck: true})
+          channel.consume(`app_${config.rabbit.serviceName}_test.balance`, async message => {
+            console.log('abba');
+            await channel.cancel(message.fields.consumerTag);
+            await channel.close();
+            res();
+          }, {noAck: true})
         )
 
       })(),
@@ -100,6 +106,7 @@ describe('core/balance processor', function () {
     let account = await accountModel.findOne({address: accounts[0]});
     expect(account.balance.toNumber()).to.be.equal(0);
 
+    let amqpInstance = await amqp.connect(config.rabbit.url);
     const channel = await amqpInstance.createChannel(); 
     await channel.assertExchange('internal', 'topic', {durable: false});
     await channel.publish('internal', `${config.rabbit.serviceName}_user.created`, 
