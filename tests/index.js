@@ -98,9 +98,7 @@ describe('core/balance processor', function () {
 
   it('send message about new account and check this balance', async () => {
     let account = await accountModel.findOne({address: accounts[0]});
-    expect(account.balance.confirmed.toNumber()).to.be.equal(0);
-    expect(account.balance.unconfirmed.toNumber()).to.be.equal(0);
-    expect(account.balance.vested.toNumber()).to.be.equal(0);
+    expect(account.balance.toNumber()).to.be.equal(0);
 
     const channel = await amqpInstance.createChannel(); 
     await channel.assertExchange('internal', 'topic', {durable: false});
@@ -112,9 +110,7 @@ describe('core/balance processor', function () {
     await Promise.delay(4000);
     account = await accountModel.findOne({address: accounts[0]});
 
-    expect(account.balance.confirmed.toNumber()).to.be.not.equal(0);
-    expect(account.balance.unconfirmed.toNumber()).to.be.not.equal(0);
-    expect(account.balance.vested.toNumber()).to.be.not.equal(0);
+    expect(account.balance.toNumber()).to.be.not.equal(0);
     
   });
 
