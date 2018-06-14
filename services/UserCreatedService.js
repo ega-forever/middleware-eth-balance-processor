@@ -27,7 +27,8 @@ class UserCreatedService {
    *
    * @memberOf MasterNode
    */
-  constructor (web3) {
+  constructor (web3, channel) {
+    this.channel = channel;
     this.web3 = web3;
   }
 
