@@ -26,6 +26,8 @@ const accountModel = require('./models/accountModel'),
   net = require('net'),
   bunyan = require('bunyan'),
   log = bunyan.createLogger({name: 'core.balanceProcessor'}),
+  updateBalance = require('./utils/updateBalance'),
+  UserCreatedService = require('./services/UserCreatedService'),
   amqp = require('amqplib');
 
 mongoose.accounts.on('disconnected', function () {
@@ -61,11 +63,16 @@ let init = async () => {
     process.exit(0);
   });
 
+  const userCreatedService = new UserCreatedService(web3, channel);
+  await userCreatedService.start();
+
   await channel.assertExchange('events', 'topic', {durable: false});
   await channel.assertQueue(`app_${config.rabbit.serviceName}.balance_processor`);
   await channel.bindQueue(`app_${config.rabbit.serviceName}.balance_processor`, 'events', `${config.rabbit.serviceName}_transaction.*`);
 
   channel.prefetch(2);
+
+  
 
   channel.consume(`app_${config.rabbit.serviceName}.balance_processor`, async (data) => {
     try {
@@ -75,14 +82,11 @@ let init = async () => {
       let accounts = tx ? await accountModel.find({address: {$in: [tx.to, tx.from]}}) : [];
 
       for (let account of accounts) {
-        let balance = await Promise.promisify(web3.eth.getBalance)(account.address);
-        await accountModel.update({address: account.address}, {$set: {balance: balance}})
-          .catch(() => {
-          });
+        account = updateBalance(web3, account.address);
 
         await  channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify({
           address: account.address,
-          balance: balance,
+          balance: account.balance,
           tx: tx
         })));
       }
