@@ -27,9 +27,10 @@ class UserCreatedService {
    *
    * @memberOf MasterNode
    */
-  constructor (web3, channel) {
+  constructor (web3, channel, rabbitPrefix) {
     this.channel = channel;
     this.web3 = web3;
+    this.rabbitPrefix = rabbitPrefix;
   }
 
   /**
