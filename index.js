@@ -63,7 +63,7 @@ let init = async () => {
     process.exit(0);
   });
 
-  const userCreatedService = new UserCreatedService(web3, channel);
+  const userCreatedService = new UserCreatedService(web3, channel, config.rabbit.serviceName);
   await userCreatedService.start();
 
   await channel.assertExchange('events', 'topic', {durable: false});
