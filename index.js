@@ -18,10 +18,11 @@ const config = require('./config'),
   mongoose = require('mongoose'),
   Promise = require('bluebird'),
   models = require('./models'),
+  _ = require('lodash'),
   providerService = require('./services/providerService'),
   bunyan = require('bunyan'),
   log = bunyan.createLogger({name: 'core.balanceProcessor'}),
-  getUpdateBalance = require('./utils/balance/getUpdateBalance'),
+  getUpdatedBalance = require('./utils/balance/getUpdatedBalance'),
   amqp = require('amqplib');
 
 mongoose.Promise = Promise;
@@ -64,22 +65,28 @@ let init = async () => {
     try {
       let parsedData = JSON.parse(data.content.toString());
       const addr = data.fields.routingKey.slice(TX_QUEUE.length + 1) || parsedData.address;
-      console.log(addr);
 
       let account = await models.accountModel.findOne({address: addr});
 
       if (!account)
         return channel.ack(data);
 
-      const balances = await getUpdateBalance(addr, parsedData.hash ? parsedData : null);
+      const balances = await getUpdatedBalance(addr, parsedData.hash ? parsedData : null);
 
       account.balance = balances.balance;
 
-      if (balances.tokens) {
-        account.erc20token = balances.tokens;
+      if (!_.isEmpty(balances.tokens)) {
+
+        if(!_.isObject(account.erc20token) || _.isArray(account.erc20token))
+          account.erc20token = {};
+
+        for(let token in balances.tokens)
+          account.erc20token[token] = balances.tokens[token];
+
         account.markModified('erc20token');
       }
 
+      console.log(account.erc20token)
       account.save();
 
       let message = {
@@ -92,6 +99,7 @@ let init = async () => {
         message.tx = parsedData;
 
 
+      log.info(`balance updated for ${account.address}`);
       await channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify(message)));
 
     } catch (e) {
