@@ -16,80 +16,92 @@
 
 const config = require('./config'),
   mongoose = require('mongoose'),
-  Promise = require('bluebird');
-
-mongoose.Promise = Promise;
-mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
-
-const accountModel = require('./models/accountModel'),
-  Web3 = require('web3'),
-  net = require('net'),
+  Promise = require('bluebird'),
+  models = require('./models'),
+  _ = require('lodash'),
+  providerService = require('./services/providerService'),
   bunyan = require('bunyan'),
   log = bunyan.createLogger({name: 'core.balanceProcessor'}),
-  updateBalance = require('./utils/updateBalance'),
-  UserCreatedService = require('./services/UserCreatedService'),
+  getUpdatedBalance = require('./utils/balance/getUpdatedBalance'),
   amqp = require('amqplib');
 
-mongoose.accounts.on('disconnected', function () {
-  log.error('mongo disconnected!');
-  process.exit(0);
-});
+mongoose.Promise = Promise;
+mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
+
+const TX_QUEUE = `${config.rabbit.serviceName}_transaction`;
 
 let init = async () => {
-  let conn = await amqp.connect(config.rabbit.url)
-    .catch(() => {
-      log.error('rabbitmq is not available!');
-      process.exit(0);
-    });
+
+  models.init();
+
+  mongoose.connection.on('disconnected', () => {
+    throw new Error('mongo disconnected!');
+  });
+
+  let conn = await amqp.connect(config.rabbit.url);
 
   let channel = await conn.createChannel();
 
   channel.on('close', () => {
-    log.error('rabbitmq process has finished!');
-    process.exit(0);
+    throw new Error('rabbitmq process has finished!');
   });
 
-  let provider = new Web3.providers.IpcProvider(config.web3.uri, net);
-  const web3 = new Web3();
-  web3.setProvider(provider);
-
-  web3.currentProvider.connection.on('end', () => {
-    log.error('ipc process has finished!');
-    process.exit(0);
-  });
-
-  web3.currentProvider.connection.on('error', () => {
-    log.error('ipc process has finished!');
-    process.exit(0);
-  });
-
-  const userCreatedService = new UserCreatedService(web3, channel, config.rabbit.serviceName);
-  await userCreatedService.start();
 
   await channel.assertExchange('events', 'topic', {durable: false});
-  await channel.assertQueue(`app_${config.rabbit.serviceName}.balance_processor`);
-  await channel.bindQueue(`app_${config.rabbit.serviceName}.balance_processor`, 'events', `${config.rabbit.serviceName}_transaction.*`);
+  await channel.assertExchange('internal', 'topic', {durable: false});
+
+
+  await channel.assertQueue(`${config.rabbit.serviceName}.balance_processor`);
+  await channel.bindQueue(`${config.rabbit.serviceName}.balance_processor`, 'events', `${TX_QUEUE}.*`);
+  await channel.bindQueue(`${config.rabbit.serviceName}.balance_processor`, 'internal', `${config.rabbit.serviceName}_user.created`);
+
+  await providerService.setRabbitmqChannel(channel, config.rabbit.serviceName);
+
 
   channel.prefetch(2);
 
-  
-
-  channel.consume(`app_${config.rabbit.serviceName}.balance_processor`, async (data) => {
+  channel.consume(`${config.rabbit.serviceName}.balance_processor`, async (data) => {
     try {
-      let block = JSON.parse(data.content.toString());
-      let tx = await Promise.promisify(web3.eth.getTransaction)(block.hash || '');
+      let parsedData = JSON.parse(data.content.toString());
+      const addr = data.fields.routingKey.slice(TX_QUEUE.length + 1) || parsedData.address;
 
-      let accounts = tx ? await accountModel.find({address: {$in: [tx.to, tx.from]}}) : [];
+      let account = await models.accountModel.findOne({address: addr});
 
-      for (let account of accounts) {
-        account = updateBalance(web3, account.address);
+      if (!account)
+        return channel.ack(data);
 
-        await  channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify({
-          address: account.address,
-          balance: account.balance,
-          tx: tx
-        })));
+      const balances = await getUpdatedBalance(addr, parsedData.hash ? parsedData : null);
+
+      account.balance = balances.balance;
+
+      if (!_.isEmpty(balances.tokens)) {
+
+        if (!_.isObject(account.erc20token) || _.isArray(account.erc20token))
+          account.erc20token = {};
+
+        for (let token of Object.keys(balances.tokens))
+          balances.tokens[token].toInt() === 0 ?
+            delete account.erc20token[token] :
+            account.erc20token[token] = balances.tokens[token];
+
+        account.markModified('erc20token');
       }
+
+      account.save();
+
+      let message = {
+        address: account.address,
+        balance: account.balance,
+        erc20token: account.erc20token
+      };
+
+      if (parsedData.hash)
+        message.tx = parsedData;
+
+
+      log.info(`balance updated for ${account.address}`);
+      await channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify(message)));
 
     } catch (e) {
       log.error(e);
@@ -99,4 +111,7 @@ let init = async () => {
   });
 };
 
-module.exports = init();
+module.exports = init().catch(err => {
+  log.error(err);
+  process.exit(0);
+});

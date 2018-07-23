@@ -8,116 +8,109 @@ require('dotenv/config');
 
 const config = require('../config'),
   mongoose = require('mongoose'),
+  erc20tokenDefinition = require('../contracts/TokenContract.json'),
   Promise = require('bluebird');
 
 mongoose.Promise = Promise;
 mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri);
 mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
 
-const awaitLastBlock = require('./helpers/awaitLastBlock'),
-  net = require('net'),
-  path = require('path'),
-  Web3 = require('web3'),
-  web3 = new Web3(),
+const providerService = require('../services/providerService'),
   expect = require('chai').expect,
-  WebSocket = require('ws'),
-  accountModel = require('../models/accountModel'),
+  models = require('../models'),
   amqp = require('amqplib'),
-  Stomp = require('webstomp-client'),
-  ctx = {};
+  ctx = {
+    accounts: [],
+    amqp: {}
+  };
 
-let accounts, amqpInstance;
 
 describe('core/balance processor', function () {
 
   before(async () => {
-    amqpInstance = await amqp.connect(config.rabbit.url);
+    models.init();
+    ctx.amqp.instance = await amqp.connect(config.rabbit.url);
+    ctx.amqp.channel = await ctx.amqp.instance.createChannel();
 
-    await accountModel.remove();
-    let provider = new Web3.providers.IpcProvider(config.web3.uri, net);
-    web3.setProvider(provider);
-
-    return await awaitLastBlock(web3);
+    await providerService.setRabbitmqChannel(ctx.amqp.channel, config.rabbit.serviceName);
+    ctx.web3 = await providerService.get();
+    await models.accountModel.remove();
   });
 
   after(async () => {
-    web3.currentProvider.connection.end();
+    ctx.web3.currentProvider.connection.end();
     return await mongoose.disconnect();
   });
 
   it('add account (if not exist) to mongo', async () => {
-    accounts = await Promise.promisify(web3.eth.getAccounts)();
-    try {
-      await new accountModel({address: accounts[0]}).save();
-    } catch (e) {
-    }
+    ctx.accounts = await Promise.promisify(ctx.web3.eth.getAccounts)();
+    await new models.accountModel({address: ctx.accounts[0]}).save();
   });
 
   it('send some eth and validate balance changes', async () => {
-    ctx.hash = await Promise.promisify(web3.eth.sendTransaction)({
-      from: accounts[0],
-      to: accounts[1],
+    ctx.hash = await Promise.promisify(ctx.web3.eth.sendTransaction)({
+      from: ctx.accounts[0],
+      to: ctx.accounts[1],
       value: 100
     });
 
     expect(ctx.hash).to.be.string;
 
-    await Promise.all([
-      (async () => {
 
-        let channel = await amqpInstance.createChannel();
-        try {
-          await channel.assertExchange('events', 'topic', {durable: false});
-          await channel.assertQueue(`app_${config.rabbit.serviceName}_test.balance`);
-          await channel.bindQueue(`app_${config.rabbit.serviceName}_test.balance`, 'events', `${config.rabbit.serviceName}_balance.*`);
-        } catch (e) {
-          channel = await amqpInstance.createChannel();
-        }
+    await ctx.amqp.channel.assertExchange('events', 'topic', {durable: false});
+    await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test.balance`);
+    await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test.balance`, 'events', `${config.rabbit.serviceName}_balance.*`);
 
-        return await new Promise(res =>
-          channel.consume(`app_${config.rabbit.serviceName}_test.balance`, async message => {
-            await channel.cancel(message.fields.consumerTag);
-            await channel.close();
-            res();
-          }, {noAck: true})
-        )
 
-      })(),
-      (async () => {
-        let ws = new WebSocket('ws://localhost:15674/ws');
-        let client = Stomp.over(ws, {heartbeat: false, debug: false});
-        return await new Promise(res =>
-          client.connect('guest', 'guest', () => {
-            client.subscribe(`/exchange/events/${config.rabbit.serviceName}_balance.*`, res)
-          })
-        );
-      })()
-    ]);
+    return await new Promise(res =>
+      ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test.balance`, res, {noAck: true})
+    );
+
 
   });
 
   it('refresh account in mongo', async () => {
-      await accountModel.remove();
-      await new accountModel({address: accounts[0]}).save();
+    await models.accountModel.remove();
+    await new models.accountModel({address: ctx.accounts[0]}).save();
   });
 
   it('send message about new account and check this balance', async () => {
-    let account = await accountModel.findOne({address: accounts[0]});
+    let account = await models.accountModel.findOne({address: ctx.accounts[0]});
     expect(account.balance.toNumber()).to.be.equal(0);
 
-    let amqpInstance = await amqp.connect(config.rabbit.url);
-    const channel = await amqpInstance.createChannel(); 
-    await channel.assertExchange('internal', 'topic', {durable: false});
-    await channel.publish('internal', `${config.rabbit.serviceName}_user.created`, 
+    await ctx.amqp.channel.assertExchange('internal', 'topic', {durable: false});
+    await ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_user.created`,
       new Buffer(JSON.stringify({
-        address: accounts[0]
+        address: ctx.accounts[0]
       }))
     );
-    await Promise.delay(4000);
-    account = await accountModel.findOne({address: accounts[0]});
+    await Promise.delay(10000);
+    account = await models.accountModel.findOne({address: ctx.accounts[0]});
 
     expect(account.balance.toNumber()).to.be.not.equal(0);
-    
   });
+
+
+  it('transfer: should transfer 100000 from creator to account[1]', async () => {
+    let balance = [];
+
+    const Erc20Contract = web3.eth.contract(erc20tokenDefinition.abi);
+
+    const ERC20Token = await new Promise((res, rej) =>
+      Erc20Contract.new({from: ctx.accounts[0], gas: 1000000}, (err, data) => err ? rej(err) : res(data))
+    );
+
+    const transfer = await new Promise((res, rej) =>
+      ERC20Token.transfer(ctx.accounts[1], 100000, {from: ctx.accounts[0]}, (err, result) => err ? rej(err) : res(result))
+    );
+
+    await Promise.delay(5000);
+    balance[0] = await TC.balanceOf.call(accounts[0]);
+    balance[1] = await TC.balanceOf.call(accounts[1]);
+
+    expect(balance[0].toNumber()).to.equal(900000);
+    expect(balance[1].toNumber()).to.equal(100000);
+  });
+
 
 });
