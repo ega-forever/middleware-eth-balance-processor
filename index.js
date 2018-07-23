@@ -77,16 +77,17 @@ let init = async () => {
 
       if (!_.isEmpty(balances.tokens)) {
 
-        if(!_.isObject(account.erc20token) || _.isArray(account.erc20token))
+        if (!_.isObject(account.erc20token) || _.isArray(account.erc20token))
           account.erc20token = {};
 
-        for(let token in balances.tokens)
-          account.erc20token[token] = balances.tokens[token];
+        for (let token of Object.keys(balances.tokens))
+          balances.tokens[token].toInt() === 0 ?
+            delete account.erc20token[token] :
+            account.erc20token[token] = balances.tokens[token];
 
         account.markModified('erc20token');
       }
 
-      console.log(account.erc20token)
       account.save();
 
       let message = {

@@ -25,11 +25,11 @@ module.exports = async (address, tx) => {
   });
 
   let tokens = tx ? _.chain(tx)
-      .get('logs', [])
-      .filter({signature: query.signature})
-      .map(log => log.address)
-      .uniq()
-      .value() :
+    .get('logs', [])
+    .filter({signature: query.signature})
+    .map(log => log.address)
+    .uniq()
+    .value() :
     await models.txLogModel.distinct('address', query);
 
 
@@ -38,7 +38,7 @@ module.exports = async (address, tx) => {
       Erc20Contract.at(token).balanceOf.call(address, (err, balance) => err ? rej(err) : res(balance))
     );
 
-    return [token, mongoose.Types.Long.fromString(balance.toString())]
+    return [token, mongoose.Types.Long.fromString(balance.toString())];
   });
 
   balances.tokens = _.fromPairs(balances.tokens);

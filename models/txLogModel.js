@@ -12,6 +12,7 @@
 
 const mongoose = require('mongoose'),
   BigNumber = require('bignumber.js'),
+  _ = require('lodash'),
   config = require('../config');
 
 
@@ -23,7 +24,7 @@ const setArgs = function (topics) {
       e: bn.e,
       c: bn.c,
       index: index
-    }
+    };
   });
 };
 

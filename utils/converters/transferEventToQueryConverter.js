@@ -27,7 +27,7 @@ const topicToArg = (topic, topicIndex) => {
   };
 };
 
-function deepMap(obj, cb, keyPath) {
+function deepMap (obj, cb, keyPath) {
 
   let out = _.isArray(obj) ? [] : {};
   let argNotFound = false;
@@ -83,7 +83,7 @@ function deepMap(obj, cb, keyPath) {
   return argNotFound ? null : out;
 }
 
-function replace(criteria) {
+function replace (criteria) {
 
   let paths = _.chain(criteria).keys()
     .filter(key =>
