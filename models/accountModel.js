@@ -13,21 +13,19 @@
 
 const mongoose = require('mongoose'),
   config = require('../config'),
-  messages = require('../factories/messages/addressMessageFactory');
-
-require('mongoose-long')(mongoose);
+  messages = require('middleware-common-components/factories/messages/addressMessageFactory');
 
 const Account = new mongoose.Schema({
   address: {
     type: String,
     unique: true,
     required: true,
-    validate: [a=>  /^(0x)?[0-9a-fA-F]{40}$/.test(a), messages.wrongAddress]
+    validate: [a => /^(0x)?[0-9a-fA-F]{40}$/.test(a), messages.wrongAddress]
   },
   isActive: {type: Boolean, required: true, default: true},
-  balance: {type: mongoose.Schema.Types.Long, default: 0},
+  balance: {type: String, default: '0'},
   created: {type: Date, required: true, default: Date.now},
-  erc20token : {type: mongoose.Schema.Types.Mixed, default: {}}
+  erc20token: {type: mongoose.Schema.Types.Mixed, default: {}}
 });
 
-module.exports = mongoose.accounts.model(`${config.mongo.accounts.collectionPrefix}Account`, Account);
+module.exports = () => mongoose.accounts.model(`${config.mongo.accounts.collectionPrefix}Account`, Account);
