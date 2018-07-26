@@ -7,11 +7,8 @@ const providerService = require('../../services/providerService'),
   models = require('../../models'),
   transferEventToQueryConverter = require('../converters/transferEventToQueryConverter'),
   _ = require('lodash'),
-  mongoose = require('mongoose'),
   Promise = require('bluebird'),
   erc20tokenDefinition = require('../../contracts/TokenContract.json');
-
-require('mongoose-long')(mongoose);
 
 module.exports = async (address, tx) => {
 
@@ -25,11 +22,11 @@ module.exports = async (address, tx) => {
   });
 
   let tokens = tx ? _.chain(tx)
-    .get('logs', [])
-    .filter({signature: query.signature})
-    .map(log => log.address)
-    .uniq()
-    .value() :
+      .get('logs', [])
+      .filter({signature: query.signature})
+      .map(log => log.address)
+      .uniq()
+      .value() :
     await models.txLogModel.distinct('address', query);
 
 
@@ -38,11 +35,11 @@ module.exports = async (address, tx) => {
       Erc20Contract.at(token).balanceOf.call(address, (err, balance) => err ? rej(err) : res(balance))
     );
 
-    return [token, mongoose.Types.Long.fromString(balance.toString())];
+    return [token, balance.toString()];
   });
 
   balances.tokens = _.fromPairs(balances.tokens);
-  balances.balance = await Promise.promisify(web3.eth.getBalance)(address);
+  balances.balance = (await Promise.promisify(web3.eth.getBalance)(address)).toString();
 
   return balances;
 };

@@ -35,7 +35,7 @@ const getArgs = topics => {
     bn.s = 1;
     bn.c = topic.c;
     bn.e = topic.e;
-    topic = bn.toString('16');
+    topic = bn.toString(16);
     while (topic.length < 64)
       topic = '0' + topic;
     return '0x' + topic;
