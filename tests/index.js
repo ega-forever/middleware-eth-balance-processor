@@ -32,7 +32,10 @@ describe('core/balanceProcessor', function () {
   before(async () => {
     models.init();
 
-    ctx.nodePid = spawn('node', ['--max_old_space_size=4096', 'tests/utils/node/ipcConverter.js'], {env: process.env, stdio: 'inherit'});
+    ctx.nodePid = spawn('node', ['--max_old_space_size=4096', 'tests/utils/node/ipcConverter.js'], {
+      env: process.env,
+      stdio: 'ignore'
+    });
     await Promise.delay(5000);
     ctx.nodePid.on('exit', function () {
       process.exit(1);
@@ -69,12 +72,11 @@ describe('core/balanceProcessor', function () {
   });
 
 
+  describe('block', () => blockTests(ctx));
 
-  //describe('block', () => blockTests(ctx));
+  describe('performance', () => performanceTests(ctx));
 
-  //describe('performance', () => performanceTests(ctx));
-
-  //describe('fuzz', () => fuzzTests(ctx));
+  describe('fuzz', () => fuzzTests(ctx));
 
   describe('features', () => featuresTests(ctx));
 

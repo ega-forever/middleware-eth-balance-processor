@@ -11,6 +11,7 @@ const models = require('../../models'),
   erc20contract = contract(erc20token),
   Promise = require('bluebird'),
   crypto = require('crypto'),
+  memwatch = require('memwatch-next'),
   getUpdatedBalance = require('../../utils/balance/getUpdatedBalance'),
   transferEventToQueryConverter = require('../../utils/converters/transferEventToQueryConverter'),
   expect = require('chai').expect;
@@ -38,13 +39,12 @@ module.exports = (ctx) => {
 
     erc20contract.setProvider(ctx.web3.currentProvider);
 
-    for(let s = 0;s < 100;s++){
+    for (let s = 0; s < 100; s++) {
       const erc20TokenInstance = await erc20contract.new({from: ctx.accounts[1], gas: 1000000});
 
-      console.log('token generated: ', erc20TokenInstance.address);
       for (let i = 0; i < 10; i++) {
 
-      const tx = await erc20TokenInstance.transfer(ctx.accounts[0], 1000, {from: ctx.accounts[1]});
+        const tx = await erc20TokenInstance.transfer(ctx.accounts[0], 1000, {from: ctx.accounts[1]});
 
         let rawTx = await Promise.promisify(ctx.web3.eth.getTransaction)(tx.tx);
         let rawTxReceipt = await Promise.promisify(ctx.web3.eth.getTransactionReceipt)(tx.tx);
@@ -99,38 +99,24 @@ module.exports = (ctx) => {
         for (let log of logsToSave)
           await models.txLogModel.create(log);
       }
-
     }
 
-/*    rawTx.logs = rawTxReceipt.logs;
+    const start = Date.now();
+    let hd = new memwatch.HeapDiff();
+    const balances = await getUpdatedBalance(ctx.accounts[0]);
 
-    let balanceToken = await erc20TokenInstance.balanceOf.call(ctx.accounts[0]);
+    let diff = hd.end();
+    let leakObjects = _.filter(diff.change.details, detail => detail.size_bytes / 1024 / 1024 > 3);
 
-    const balances = await getUpdatedBalance(ctx.accounts[0], rawTx);
-
-    expect(balances.balance).to.eq(balance.toString());
-    expect(balances.tokens[erc20TokenInstance.address]).to.eq(balanceToken.toString());*/
+    expect(leakObjects.length).to.be.eq(0);
+    expect(Date.now() - start).to.be.below(5000);
+    expect(Object.keys(balances.tokens).length).to.eq(100);
   });
 
-  /*it('validate transferEventToQueryConverter function', async () => {
-
-
-    let rawTxReceipt = await Promise.promisify(ctx.web3.eth.getTransactionReceipt)(ctx.tx.tx);
-    const log = rawTxReceipt.logs[0];
-
-    const transferEvent = JSON.parse(JSON.stringify(_.find(ctx.tx.logs, {event: 'Transfer'})));
-    transferEvent.args = _.chain(transferEvent.args)
-      .toPairs()
-      .map((pair, index) => {
-        return [pair[0], log.topics[index + 1] || log.data]
-      })
-      .fromPairs()
-      .value();
-
-    const query = transferEventToQueryConverter(transferEvent.args);
-
-    const logExist = await models.txLogModel.count(query);
-    expect(logExist).to.eq(1);
-  });*/
+  it('validate transferEventToQueryConverter function', async () => {
+    const query = transferEventToQueryConverter({from: ctx.accounts[1]});
+    const logCount = await models.txLogModel.count(query);
+    expect(logCount).to.eq(1000);
+  });
 
 };

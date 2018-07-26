@@ -1,9 +1,12 @@
+/**
+ * Copyright 2017–2018, LaborX PTY
+ * Licensed under the AGPL Version 3 license.
+ * @author Egor Zuev <zyev.egor@gmail.com>
+ */
+
 const _ = require('lodash'),
   BigNumber = require('bignumber.js'),
   TokenContract = require('../../contracts/TokenContract');
-//smEvents = require('../../factories/sc/smartContractsEventsFactory');
-
-//const smEvents = _.filter(TokenContract.abi, item => item.type === 'event');
 
 const eventDefinition = _.chain(TokenContract).get('networks')
   .toPairs()
@@ -18,6 +21,13 @@ const eventDefinition = _.chain(TokenContract).get('networks')
   })
   .value();
 
+/**
+ * @function
+ * @description convert topic to arg
+ * @param topic - the topic in hex representation
+ * @param topicIndex - index of the topic
+ * @return {{e: *, c: *, index: *}}
+ */
 const topicToArg = (topic, topicIndex) => {
   const bn = BigNumber(topic, 16);
   return {
@@ -27,7 +37,15 @@ const topicToArg = (topic, topicIndex) => {
   };
 };
 
-function deepMap (obj, cb, keyPath) {
+/**
+ * @function
+ * @description deep map of the object with custom value modifier
+ * @param obj - the object for deep mapping
+ * @param cb - the mapper function
+ * @param keyPath - the key path
+ * @return {null}
+ */
+const deepMap = (obj, cb, keyPath) => {
 
   let out = _.isArray(obj) ? [] : {};
   let argNotFound = false;
@@ -83,7 +101,13 @@ function deepMap (obj, cb, keyPath) {
   return argNotFound ? null : out;
 }
 
-function replace (criteria) {
+/**
+ * @function
+ * @description convert prepared object to mongo query
+ * @param criteria
+ * @return {*}
+ */
+const replace = (criteria) => {
 
   let paths = _.chain(criteria).keys()
     .filter(key =>
@@ -146,6 +170,12 @@ function replace (criteria) {
   }, criteria);
 }
 
+/**
+ * @function
+ * @description convert request to mongo request
+ * @param criteria
+ * @return {*}
+ */
 const converter = (query) => {
 
   let criteria = deepMap(query, (val, keyPath) => {

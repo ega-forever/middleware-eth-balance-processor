@@ -19,7 +19,7 @@ module.exports = (ctx) => {
     await models.accountModel.remove({});
     await ctx.amqp.channel.deleteQueue(`${config.rabbit.serviceName}.balance_processor`);
 
-    ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'inherit'});
+    ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
     await Promise.delay(5000);
 
     for (let address of _.take(ctx.accounts, 2))
@@ -85,7 +85,7 @@ module.exports = (ctx) => {
     await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, new Buffer(JSON.stringify(tx)));
 
 
-    ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'inherit'});
+    ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
     await Promise.delay(20000);
     let accountUpdated = await models.accountModel.findOne({address: ctx.accounts[0]});
     expect(account.balance).to.not.eq(accountUpdated.balance);

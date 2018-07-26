@@ -1,8 +1,9 @@
 /**
  * Copyright 2017–2018, LaborX PTY
  * Licensed under the AGPL Version 3 license.
- * @author Kirill Sergeev <cloudkserg11@gmail.com>
+ * @author Egor Zuev <zyev.egor@gmail.com>
  */
+
 const providerService = require('../../services/providerService'),
   models = require('../../models'),
   transferEventToQueryConverter = require('../converters/transferEventToQueryConverter'),
@@ -10,6 +11,13 @@ const providerService = require('../../services/providerService'),
   Promise = require('bluebird'),
   erc20tokenDefinition = require('../../contracts/TokenContract.json');
 
+/**
+ * @function
+ * @description calculate the balance of the user (general balance + erc20)
+ * @param address - user's address
+ * @param tx - the transaction, emitted by the user (optional)
+ * @return {Promise<void>}
+ */
 module.exports = async (address, tx) => {
 
   const web3 = await providerService.get();
@@ -30,11 +38,8 @@ module.exports = async (address, tx) => {
     await models.txLogModel.distinct('address', query);
 
 
-  balances.tokens = await Promise.map(tokens, async token => {
-    let balance = await new Promise((res, rej) =>
-      Erc20Contract.at(token).balanceOf.call(address, (err, balance) => err ? rej(err) : res(balance))
-    );
-
+  balances.tokens = await Promise.mapSeries(tokens, async token => {
+    let balance = await Promise.promisify(Erc20Contract.at(token).balanceOf.call)(address);
     return [token, balance.toString()];
   });
 

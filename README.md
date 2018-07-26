@@ -37,7 +37,8 @@ The options are presented below:
 | RABBIT_URI   | rabbitmq URI connection string
 | RABBIT_SERVICE_NAME   | namespace for all rabbitmq queues, like 'app_eth_transaction'
 | NETWORK   | network name (alias)- is used for connecting via ipc (see block processor section)
-| WEB3_URI   | the path to ipc interface
+| PROVIDERS   | the paths to ipc / http interface, written with comma sign
+| WEB3_URI (deprecated)   | the path to ipc interface
 
 License
 ----
