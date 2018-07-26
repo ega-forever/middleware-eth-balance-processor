@@ -61,8 +61,7 @@ class ProviderService extends AbstractProvider {
       const currentProviderURI = this.connector ? this.connector.currentProvider.path || this.connector.currentProvider.host : '';
 
       if (currentProviderURI === fullProviderURI)
-        return;
-
+        return this.events.emit('provider_set');
 
       this.connector = this.makeWeb3FromProviderURI(providerURI);
 

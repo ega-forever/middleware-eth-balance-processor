@@ -81,7 +81,7 @@ let init = async () => {
           account.erc20token = {};
 
         for (let token of Object.keys(balances.tokens))
-          balances.tokens[token].toInt() === 0 ?
+          parseInt(balances.tokens[token]) === 0 ?
             delete account.erc20token[token] :
             account.erc20token[token] = balances.tokens[token];
 
@@ -93,12 +93,9 @@ let init = async () => {
       let message = {
         address: account.address,
         balance: account.balance,
-        erc20token: account.erc20token
+        erc20token: account.erc20token,
+        tx: parsedData.hash ? parsedData : null
       };
-
-      if (parsedData.hash)
-        message.tx = parsedData;
-
 
       log.info(`balance updated for ${account.address}`);
       await channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify(message)));
