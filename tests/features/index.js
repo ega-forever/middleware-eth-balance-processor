@@ -51,6 +51,17 @@ module.exports = (ctx) => {
           value: 1000
         });
         tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
+
+        await new Promise(res => {
+          let intervalPid = setInterval(async () => {
+            tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
+            if (tx.blockNumber) {
+              clearInterval(intervalPid);
+              res();
+            }
+          }, 1000)
+        });
+
         balance0 = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[0]);
         balance1 = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[1]);
         await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, new Buffer(JSON.stringify(tx)));
@@ -98,7 +109,6 @@ module.exports = (ctx) => {
 
       })()
     ]);
-
   });
 
   it('validate balance on user registration', async () => {
@@ -113,6 +123,7 @@ module.exports = (ctx) => {
 
     await Promise.all([
       (async () => {
+        await Promise.delay(3000);
         await ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_user.created`, new Buffer(JSON.stringify({address: ctx.accounts[0]})));
       })(),
       (async () => {

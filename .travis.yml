@@ -18,7 +18,7 @@ install:
   - npm install
 
 script:
-  - npm test -- --coverage
+  - travis_wait 30 npm test -- --coverage
 
 after_success:
   - FULL_GCR_KEY="-----BEGIN PRIVATE KEY-----\n"$GCR_KEY"\n-----END PRIVATE KEY-----\n"
