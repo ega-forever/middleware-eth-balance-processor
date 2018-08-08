@@ -5,119 +5,79 @@
  */
 
 require('dotenv/config');
+process.env.LOG_LEVEL = 'error';
 
 const config = require('../config'),
-  mongoose = require('mongoose'),
-  Promise = require('bluebird');
-
-mongoose.Promise = Promise;
-mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri);
-mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
-
-const awaitLastBlock = require('./helpers/awaitLastBlock'),
-  net = require('net'),
-  path = require('path'),
+  models = require('../models'),
+  spawn = require('child_process').spawn,
   Web3 = require('web3'),
-  web3 = new Web3(),
-  expect = require('chai').expect,
-  WebSocket = require('ws'),
-  accountModel = require('../models/accountModel'),
+  net = require('net'),
+  fuzzTests = require('./fuzz'),
+  performanceTests = require('./performance'),
+  featuresTests = require('./features'),
+  blockTests = require('./blocks'),
+  Promise = require('bluebird'),
+  mongoose = require('mongoose'),
+  providerService = require('../services/providerService'),
   amqp = require('amqplib'),
-  Stomp = require('webstomp-client'),
   ctx = {};
 
-let accounts, amqpInstance;
+mongoose.Promise = Promise;
+mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
 
-describe('core/balance processor', function () {
+
+describe('core/balanceProcessor', function () {
 
   before(async () => {
-    amqpInstance = await amqp.connect(config.rabbit.url);
+    models.init();
 
-    await accountModel.remove();
-    let provider = new Web3.providers.IpcProvider(config.web3.uri, net);
-    web3.setProvider(provider);
+    ctx.nodePid = spawn('node', ['--max_old_space_size=4096', 'tests/utils/node/ipcConverter.js'], {
+      env: process.env,
+      stdio: 'ignore'
+    });
+    await Promise.delay(5000);
+    ctx.nodePid.on('exit', function () {
+      process.exit(1);
+    });
 
-    return await awaitLastBlock(web3);
+    const provider = /http:\/\//.test(config.web3.providers[0]) ?
+      new Web3.providers.HttpProvider(config.web3.providers[0]) :
+      new Web3.providers.IpcProvider(`${/^win/.test(process.platform) ? '\\\\.\\pipe\\' : ''}${config.web3.providers[0]}`, net);
+
+    ctx.web3 = new Web3(provider);
+    ctx.accounts = await Promise.promisify(ctx.web3.eth.getAccounts)();
+
+
+    ctx.amqp = {};
+    ctx.amqp.instance = await amqp.connect(config.rabbit.url);
+    ctx.amqp.channel = await ctx.amqp.instance.createChannel();
+    await ctx.amqp.channel.assertExchange('events', 'topic', {durable: false});
+    await ctx.amqp.channel.assertExchange('internal', 'topic', {durable: false});
+    await ctx.amqp.channel.assertQueue(`${config.rabbit.serviceName}_current_provider.get`, {durable: false});
+    await ctx.amqp.channel.bindQueue(`${config.rabbit.serviceName}_current_provider.get`, 'internal', `${config.rabbit.serviceName}_current_provider.get`);
+
+    ctx.amqp.channel.consume(`${config.rabbit.serviceName}_current_provider.get`, async () => {
+      ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: 0})));
+    }, {noAck: true});
+
+    await providerService.setRabbitmqChannel(ctx.amqp.channel, config.rabbit.serviceName);
+
   });
 
   after(async () => {
-    web3.currentProvider.connection.end();
-    return await mongoose.disconnect();
+    mongoose.disconnect();
+    mongoose.accounts.close();
+    await ctx.amqp.instance.close();
   });
 
-  it('add account (if not exist) to mongo', async () => {
-    accounts = await Promise.promisify(web3.eth.getAccounts)();
-    try {
-      await new accountModel({address: accounts[0]}).save();
-    } catch (e) {
-    }
-  });
 
-  it('send some eth and validate balance changes', async () => {
-    ctx.hash = await Promise.promisify(web3.eth.sendTransaction)({
-      from: accounts[0],
-      to: accounts[1],
-      value: 100
-    });
+  //describe('block', () => blockTests(ctx));
 
-    expect(ctx.hash).to.be.string;
+  //describe('performance', () => performanceTests(ctx));
 
-    await Promise.all([
-      (async () => {
+  //describe('fuzz', () => fuzzTests(ctx));
 
-        let channel = await amqpInstance.createChannel();
-        try {
-          await channel.assertExchange('events', 'topic', {durable: false});
-          await channel.assertQueue(`app_${config.rabbit.serviceName}_test.balance`);
-          await channel.bindQueue(`app_${config.rabbit.serviceName}_test.balance`, 'events', `${config.rabbit.serviceName}_balance.*`);
-        } catch (e) {
-          channel = await amqpInstance.createChannel();
-        }
-
-        return await new Promise(res =>
-          channel.consume(`app_${config.rabbit.serviceName}_test.balance`, async message => {
-            await channel.cancel(message.fields.consumerTag);
-            await channel.close();
-            res();
-          }, {noAck: true})
-        )
-
-      })(),
-      (async () => {
-        let ws = new WebSocket('ws://localhost:15674/ws');
-        let client = Stomp.over(ws, {heartbeat: false, debug: false});
-        return await new Promise(res =>
-          client.connect('guest', 'guest', () => {
-            client.subscribe(`/exchange/events/${config.rabbit.serviceName}_balance.*`, res)
-          })
-        );
-      })()
-    ]);
-
-  });
-
-  it('refresh account in mongo', async () => {
-      await accountModel.remove();
-      await new accountModel({address: accounts[0]}).save();
-  });
-
-  it('send message about new account and check this balance', async () => {
-    let account = await accountModel.findOne({address: accounts[0]});
-    expect(account.balance.toNumber()).to.be.equal(0);
-
-    let amqpInstance = await amqp.connect(config.rabbit.url);
-    const channel = await amqpInstance.createChannel(); 
-    await channel.assertExchange('internal', 'topic', {durable: false});
-    await channel.publish('internal', `${config.rabbit.serviceName}_user.created`, 
-      new Buffer(JSON.stringify({
-        address: accounts[0]
-      }))
-    );
-    await Promise.delay(4000);
-    account = await accountModel.findOne({address: accounts[0]});
-
-    expect(account.balance.toNumber()).to.be.not.equal(0);
-    
-  });
+  describe('features', () => featuresTests(ctx));
 
 });
