@@ -25,8 +25,8 @@ module.exports = (ctx) => {
     for (let address of _.take(ctx.accounts, 2))
       await models.accountModel.create({
         address: address,
-        balance: 0,
-        erc20token: {},
+        balance: '0',
+        erc20token: [],
         isActive: true
       });
   });

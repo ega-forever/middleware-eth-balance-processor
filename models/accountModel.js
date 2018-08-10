@@ -25,7 +25,7 @@ const Account = new mongoose.Schema({
   isActive: {type: Boolean, required: true, default: true},
   balance: {type: String, default: '0'},
   created: {type: Date, required: true, default: Date.now},
-  erc20token: {type: mongoose.Schema.Types.Mixed, default: {}}
+  erc20token: {type: mongoose.Schema.Types.Mixed, default: []}
 });
 
 module.exports = () => mongoose.accounts.model(`${config.mongo.accounts.collectionPrefix}Account`, Account);
