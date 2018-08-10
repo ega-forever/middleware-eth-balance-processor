@@ -30,21 +30,25 @@ module.exports = async (address, tx) => {
   });
 
   let tokens = tx ? _.chain(tx)
-      .get('logs', [])
-      .filter({signature: query.signature})
-      .map(log => log.address)
-      .uniq()
-      .value() :
+    .get('logs', [])
+    .filter({signature: query.signature})
+    .map(log => log.address)
+    .uniq()
+    .value() :
     await models.txLogModel.distinct('address', query);
 
-
   balances.tokens = await Promise.mapSeries(tokens, async token => {
-    let balance = await Promise.promisify(Erc20Contract.at(token).balanceOf.call)(address);
-    return [token, balance.toString()];
+    const contractInstance = Erc20Contract.at(token);
+    let balance = await Promise.promisify(contractInstance.balanceOf.call)(address);
+    let symbol = await Promise.promisify(contractInstance.symbol.call)();
+
+    return {
+      symbol: symbol,
+      address: token,
+      balance: balance.toString()
+    };
   });
 
-  balances.tokens = _.fromPairs(balances.tokens);
   balances.balance = (await Promise.promisify(web3.eth.getBalance)(address)).toString();
-
   return balances;
 };
