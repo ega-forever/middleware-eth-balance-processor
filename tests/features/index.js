@@ -233,7 +233,7 @@ module.exports = (ctx) => {
             const message = JSON.parse(data.content.toString());
 
             expect(_.isEqual(JSON.parse(JSON.stringify(rawTx)), message.tx)).to.equal(true);
-            expect(message.erc20token[ctx.erc20TokenInstance.address]).to.eq(balanceAccount1.toString());
+            expect(_.find(message.erc20token, {address: ctx.erc20TokenInstance.address}).balance).to.eq(balanceAccount1.toString());
             expect(message.address).to.eq(ctx.accounts[1]);
 
             await ctx.amqp.channel.deleteQueue(`app_${config.rabbit.serviceName}_test_features.balance`);

@@ -100,7 +100,7 @@ module.exports = (ctx) => {
     const balances = await getUpdatedBalance(ctx.accounts[0], rawTx);
 
     expect(balances.balance).to.eq(balance.toString());
-    expect(balances.tokens[erc20TokenInstance.address]).to.eq(balanceToken.toString());
+    expect(_.find(balances.tokens, {address:erc20TokenInstance.address}).balance).to.eq(balanceToken.toString());
   });
 
   it('validate transferEventToQueryConverter function', async ()=>{
