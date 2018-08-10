@@ -99,7 +99,7 @@ const deepMap = (obj, cb, keyPath) => {
   });
 
   return argNotFound ? null : out;
-}
+};
 
 /**
  * @function
@@ -168,7 +168,7 @@ const replace = (criteria) => {
 
 
   }, criteria);
-}
+};
 
 /**
  * @function

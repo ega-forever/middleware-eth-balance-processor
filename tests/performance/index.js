@@ -39,7 +39,7 @@ module.exports = (ctx) => {
 
     erc20contract.setProvider(ctx.web3.currentProvider);
 
-    for (let s = 0; s < 100; s++) {
+    for (let s = 0; s < 10; s++) {
       const erc20TokenInstance = await erc20contract.new({from: ctx.accounts[1], gas: 1000000});
 
       for (let i = 0; i < 10; i++) {
@@ -109,14 +109,14 @@ module.exports = (ctx) => {
     let leakObjects = _.filter(diff.change.details, detail => detail.size_bytes / 1024 / 1024 > 3);
 
     expect(leakObjects.length).to.be.eq(0);
-    expect(Date.now() - start).to.be.below(5000);
-    expect(Object.keys(balances.tokens).length).to.eq(100);
+    expect(Date.now() - start).to.be.below(10000);
+    expect(Object.keys(balances.tokens).length).to.eq(10);
   });
 
   it('validate transferEventToQueryConverter function', async () => {
     const query = transferEventToQueryConverter({from: ctx.accounts[1]});
     const logCount = await models.txLogModel.count(query);
-    expect(logCount).to.eq(1000);
+    expect(logCount).to.eq(100);
   });
 
 };
