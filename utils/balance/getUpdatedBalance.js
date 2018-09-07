@@ -30,20 +30,22 @@ module.exports = async (address, tx) => {
   });
 
   let tokens = tx ? _.chain(tx)
-    .get('logs', [])
-    .filter({signature: query.signature})
-    .map(log => log.address)
-    .uniq()
-    .value() :
+      .get('logs', [])
+      .filter({signature: query.signature})
+      .map(log => log.address)
+      .uniq()
+      .value() :
     await models.txLogModel.distinct('address', query);
 
   balances.tokens = await Promise.mapSeries(tokens, async token => {
     const contractInstance = Erc20Contract.at(token);
     let balance = await Promise.promisify(contractInstance.balanceOf.call)(address);
     let symbol = await Promise.promisify(contractInstance.symbol.call)();
+    let decimals = await Promise.promisify(contractInstance.decimals.call)().catch(() => '18');
 
     return {
       symbol: symbol,
+      decimals: decimals.toString(),
       address: token,
       balance: balance.toString()
     };
