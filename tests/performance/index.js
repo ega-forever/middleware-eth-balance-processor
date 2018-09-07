@@ -42,9 +42,11 @@ module.exports = (ctx) => {
     for (let s = 0; s < 10; s++) {
       const erc20TokenInstance = await erc20contract.new({from: ctx.accounts[1], gas: 1000000});
       await Promise.delay(1000);
+      console.log(`generated token: `, erc20TokenInstance.address);
 
       for (let i = 0; i < 10; i++) {
 
+        console.log('submitting new tx');
         const tx = await erc20TokenInstance.transfer(ctx.accounts[0], 1000, {from: ctx.accounts[1]});
 
         let rawTx = await Promise.promisify(ctx.web3.eth.getTransaction)(tx.tx);
