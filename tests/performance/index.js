@@ -41,6 +41,7 @@ module.exports = (ctx) => {
 
     for (let s = 0; s < 10; s++) {
       const erc20TokenInstance = await erc20contract.new({from: ctx.accounts[1], gas: 1000000});
+      await Promise.delay(1000);
 
       for (let i = 0; i < 10; i++) {
 
