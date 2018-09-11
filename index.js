@@ -21,7 +21,7 @@ const config = require('./config'),
   _ = require('lodash'),
   providerService = require('./services/providerService'),
   bunyan = require('bunyan'),
-  log = bunyan.createLogger({name: 'core.balanceProcessor'}),
+  log = bunyan.createLogger({name: 'core.balanceProcessor', level: config.logs.level}),
   getUpdatedBalance = require('./utils/balance/getUpdatedBalance'),
   amqp = require('amqplib');
 

@@ -10,13 +10,14 @@
  */
 
 const net = require('net'),
+  config = require('../../../config'),
   Web3 = require('web3'),
   web3 = new Web3(),
   bunyan = require('bunyan'),
   fs = require('fs'),
   path = require('path'),
   _ = require('lodash'),
-  log = bunyan.createLogger({name: 'ipcConverter'}),
+  log = bunyan.createLogger({name: 'ipcConverter', level: config.logs.level}),
   dbPath = path.join(__dirname, 'testrpc_db'),
   TestRPC = require('ganache-cli');
 
