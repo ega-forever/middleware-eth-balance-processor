@@ -46,7 +46,6 @@ let addresses = _.chain(RPCServer.provider.manager.state.accounts)
   .fromPairs()
   .value();
 
-console.log(addresses);
 
 // create RPC server
 const server = net.createServer(stream => {
