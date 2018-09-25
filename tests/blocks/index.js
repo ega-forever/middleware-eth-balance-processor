@@ -113,7 +113,7 @@ module.exports = (ctx) => {
     transferEvent.args = _.chain(transferEvent.args)
       .toPairs()
       .map((pair, index)=>{
-        return [pair[0], log.topics[index + 1] || log.data]
+        return [pair[0], log.topics[index + 1] || log.data];
       })
       .fromPairs()
       .value();
