@@ -73,6 +73,7 @@ describe('core/balanceProcessor', function () {
     mongoose.disconnect();
     mongoose.accounts.close();
     await ctx.amqp.instance.close();
+    await ctx.checkerPid.kill();
   });
 
 
