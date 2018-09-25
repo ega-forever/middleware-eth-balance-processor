@@ -59,7 +59,7 @@ module.exports = (ctx) => {
               clearInterval(intervalPid);
               res();
             }
-          }, 1000)
+          }, 1000);
         });
 
         balance0 = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[0]);
@@ -248,6 +248,6 @@ module.exports = (ctx) => {
 
   after(() => {
     delete ctx.erc20TokenInstance;
-  })
+  });
 
 };
