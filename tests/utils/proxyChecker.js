@@ -5,7 +5,7 @@
  */
 const amqp = require('amqplib'),
   _ =require('lodash'),
-  config = require('../config');
+  config = require('../../config');
 
 
 const main = async () => {
