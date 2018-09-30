@@ -63,12 +63,17 @@ describe('core/balanceProcessor', function () {
 
     await providerService.setRabbitmqChannel(ctx.amqp.channel, config.rabbit.serviceName);
 
+    ctx.checkerPid = spawn('node', ['tests/utils/proxyChecker.js'], {
+      env: process.env, stdio: 'ignore'
+    });
+    await Promise.delay(5000);
   });
 
   after(async () => {
     mongoose.disconnect();
     mongoose.accounts.close();
     await ctx.amqp.instance.close();
+    await ctx.checkerPid.kill();
   });
 
 
