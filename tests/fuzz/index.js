@@ -43,7 +43,7 @@ module.exports = (ctx) => {
     });
     let tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
 
-    await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_fuzz.balance`);
+    await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_fuzz.balance`, {autoDelete: true});
     await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_fuzz.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[0]}`);
     await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, new Buffer(JSON.stringify(tx)));
 
@@ -67,7 +67,7 @@ module.exports = (ctx) => {
     expect(parseInt(account.balance)).to.be.above(0);
   });
 
-
+/*
   it('kill balance processor', async () => {
     ctx.balanceProcessorPid.kill();
   });
@@ -90,7 +90,7 @@ module.exports = (ctx) => {
     let accountUpdated = await models.accountModel.findOne({address: ctx.accounts[0]});
     expect(account.balance).to.not.eq(accountUpdated.balance);
   });
-
+*/
 
   after(async () => {
     ctx.balanceProcessorPid.kill();

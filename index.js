@@ -19,12 +19,34 @@ const config = require('./config'),
   Promise = require('bluebird'),
   models = require('./models'),
   _ = require('lodash'),
+
+  AmqpService = require('middleware_common_infrastructure/AmqpService'),
+  InfrastructureInfo = require('middleware_common_infrastructure/InfrastructureInfo'),
+  InfrastructureService = require('middleware_common_infrastructure/InfrastructureService'),
+  
   providerService = require('./services/providerService'),
   bunyan = require('bunyan'),
-  log = bunyan.createLogger({name: 'core.balanceProcessor'}),
+  log = bunyan.createLogger({name: 'core.balanceProcessor', level: config.logs.level}),
   getUpdatedBalance = require('./utils/balance/getUpdatedBalance'),
   amqp = require('amqplib');
 
+const runSystem = async function () {
+  const rabbit = new AmqpService(
+    config.systemRabbit.url, 
+    config.systemRabbit.exchange,
+    config.systemRabbit.serviceName
+  );
+  const info = new InfrastructureInfo(require('./package.json'), config.system.waitTime);
+  const system = new InfrastructureService(info, rabbit, {checkInterval: 10000});
+  await system.start();
+  system.on(system.REQUIREMENT_ERROR, (requirement, version) => {
+    log.error(`Not found requirement with name ${requirement.name} version=${requirement.version}.` +
+        ` Last version of this middleware=${version}`);
+    process.exit(1);
+  });
+  await system.checkRequirements();
+  system.periodicallyCheck();
+};
 mongoose.Promise = Promise;
 mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
 mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
@@ -32,6 +54,8 @@ mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMon
 const TX_QUEUE = `${config.rabbit.serviceName}_transaction`;
 
 let init = async () => {
+  if (config.checkSystem)
+    await runSystem();
 
   models.init();
 
@@ -91,7 +115,7 @@ let init = async () => {
         account.markModified('erc20token');
       }
 
-      account.save();
+      await account.save();
 
       let message = {
         address: account.address,

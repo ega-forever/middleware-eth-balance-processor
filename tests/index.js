@@ -59,25 +59,30 @@ describe('core/balanceProcessor', function () {
 
     ctx.amqp.channel.consume(`${config.rabbit.serviceName}_current_provider.get`, async () => {
       ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: 0})));
-    }, {noAck: true});
+    }, {noAck: true, autoDelete: true});
 
     await providerService.setRabbitmqChannel(ctx.amqp.channel, config.rabbit.serviceName);
 
+    ctx.checkerPid = spawn('node', ['tests/utils/proxyChecker.js'], {
+      env: process.env, stdio: 'ignore'
+    });
+    await Promise.delay(5000);
   });
 
   after(async () => {
     mongoose.disconnect();
     mongoose.accounts.close();
     await ctx.amqp.instance.close();
+    await ctx.checkerPid.kill();
   });
 
 
   describe('block', () => blockTests(ctx));
 
-  describe('performance', () => performanceTests(ctx));
 
   describe('fuzz', () => fuzzTests(ctx));
 
   describe('features', () => featuresTests(ctx));
+  describe('performance', () => performanceTests(ctx));
 
 });
