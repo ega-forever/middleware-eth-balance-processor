@@ -115,7 +115,7 @@ let init = async () => {
         account.markModified('erc20token');
       }
 
-      account.save();
+      await account.save();
 
       let message = {
         address: account.address,
