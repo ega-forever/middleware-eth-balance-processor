@@ -59,7 +59,7 @@ describe('core/balanceProcessor', function () {
 
     ctx.amqp.channel.consume(`${config.rabbit.serviceName}_current_provider.get`, async () => {
       ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: 0})));
-    }, {noAck: true});
+    }, {noAck: true, autoDelete: true});
 
     await providerService.setRabbitmqChannel(ctx.amqp.channel, config.rabbit.serviceName);
 

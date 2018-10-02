@@ -68,7 +68,7 @@ module.exports = (ctx) => {
         await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[1]}`, new Buffer(JSON.stringify(tx)));
       })(),
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[1]}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.balance`, async data => {
@@ -89,7 +89,7 @@ module.exports = (ctx) => {
 
       })(),
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features2.balance`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features2.balance`, {autoDelete:true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features2.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[0]}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features2.balance`, async data => {
@@ -127,7 +127,7 @@ module.exports = (ctx) => {
         await ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_user.created`, new Buffer(JSON.stringify({address: ctx.accounts[0]})));
       })(),
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[0]}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.balance`, async data => {
@@ -222,7 +222,7 @@ module.exports = (ctx) => {
         await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[1]}`, new Buffer(JSON.stringify(rawTx)));
       })(),
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[1]}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.balance`, async data => {
