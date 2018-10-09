@@ -15,15 +15,13 @@ const main = async () => {
     const channel = await amqpInstance.createChannel();
     _.map(package.requirements, async (r, k) => {
       await channel.assertQueue('test_block', {autoDelete: true, durable: false, noAck: true});
-      await channel.bindQueue('test_block', config.systemRabbit.exchange, 
-        `${config.systemRabbit.serviceName}.${k}.checking`);
+      await channel.bindQueue('test_block', config.systemRabbit.exchange, `${config.systemRabbit.serviceName}.${k}.checking`);
       channel.consume('test_block', async msg => {
             if (!msg)
               return;
             const content = JSON.parse(msg.content);
             const version = content.version;
-            await channel.publish(config.rabbit.exchange, 
-              `${config.systemRabbit.serviceName}.${k}.checked`, new Buffer(JSON.stringify({version})));
+            await channel.publish(config.systemRabbit.exchange, `${config.systemRabbit.serviceName}.${k}.checked`, new Buffer(JSON.stringify({version})));
       });
     });
 };
