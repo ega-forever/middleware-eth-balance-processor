@@ -26,22 +26,20 @@ class ProviderService extends AbstractProvider {
 
   makeWeb3FromProviderURI (providerURI) {
 
-    const provider = /^http/.test(providerURI) ?
-      new Web3.providers.HttpProvider(providerURI) :
-      new Web3.providers.IpcProvider(`${/^win/.test(process.platform) ? '\\\\.\\pipe\\' : ''}${providerURI}`, net);
+    if (/^http/.test(providerURI) || /^ws/.test(providerURI))
+      return new Web3(providerURI);
 
-    const web3 = new Web3();
-    web3.setProvider(provider);
-    return web3;
+    providerURI = `${/^win/.test(process.platform) ? '\\\\.\\pipe\\' : ''}${providerURI}`;
+    return new Web3(providerURI, net);
   }
 
   /** @function
    * @description reset the current connection
    */
   async resetConnector () {
-    await this.connector.reset();
+    if (_.has(this.connector, 'currentProvider.connection.close'))
+      this.connector.currentProvider.connection.close();
     this.switchConnector();
-    this.events.emit('disconnected');
   }
 
 
@@ -66,19 +64,20 @@ class ProviderService extends AbstractProvider {
       this.connector = this.makeWeb3FromProviderURI(providerURI);
 
       if (_.get(this.connector.currentProvider, 'connection')) {
-        this.connector.currentProvider.connection.on('end', () => this.resetConnector());
-        this.connector.currentProvider.connection.on('error', () => this.resetConnector());
+
+        if (_.has(this.connector.currentProvider.connection, 'onerror')) {
+          this.connector.currentProvider.connection.onerror(() => this.resetConnector());
+          this.connector.currentProvider.connection.onclose(() => this.resetConnector());
+        } else if (_.has(this.connector.currentProvider.connection, 'on')) {
+          this.connector.currentProvider.connection.on('end', () => this.resetConnector());
+          this.connector.currentProvider.connection.on('error', () => this.resetConnector());
+        }
+
+
       } else
         this.pingIntervalId = setInterval(async () => {
 
-          const isConnected = await new Promise((res, rej) => {
-            this.connector.currentProvider.sendAsync({
-              id: 9999999999,
-              jsonrpc: '2.0',
-              method: 'net_listening',
-              params: []
-            }, (err, result) => err ? rej(err) : res(result.result));
-          });
+          const isConnected = await this.connector.eth.getProtocolVersion().catch(() => null);
 
           if (!isConnected) {
             clearInterval(this.pingIntervalId);

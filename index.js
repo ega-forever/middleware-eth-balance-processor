@@ -125,7 +125,7 @@ let init = async () => {
       };
 
       log.info(`balance updated for ${account.address}`);
-      await channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, new Buffer(JSON.stringify(message)));
+      await channel.publish('events', `${config.rabbit.serviceName}_balance.${account.address}`, Buffer.from(JSON.stringify(message)));
 
     } catch (e) {
       log.error(e);

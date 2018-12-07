@@ -6,10 +6,7 @@
 
 const models = require('../../models'),
   _ = require('lodash'),
-  contract = require('truffle-contract'),
   erc20token = require('../../contracts/TokenContract.json'),
-  erc20contract = contract(erc20token),
-  Promise = require('bluebird'),
   crypto = require('crypto'),
   getUpdatedBalance = require('../../utils/balance/getUpdatedBalance'),
   transferEventToQueryConverter = require('../../utils/converters/transferEventToQueryConverter'),
@@ -33,15 +30,22 @@ module.exports = (ctx) => {
   });
 
   it('validate getUpdatedBalance function', async () => {
-    const balance = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[0]);
+    const balance = await ctx.web3.eth.getBalance(ctx.accounts[1]);
     expect(parseInt(balance.toString())).to.be.gt(0);
 
-    erc20contract.setProvider(ctx.web3.currentProvider);
-    const erc20TokenInstance = await erc20contract.new({from: ctx.accounts[1], gas: 1000000});
-    ctx.tx = await erc20TokenInstance.transfer(ctx.accounts[0], 1000, {from: ctx.accounts[1]});
+    const erc20contract = new ctx.web3.eth.Contract(erc20token.abi);
 
-    let rawTx = await Promise.promisify(ctx.web3.eth.getTransaction)(ctx.tx.tx);
-    let rawTxReceipt = await Promise.promisify(ctx.web3.eth.getTransactionReceipt)(ctx.tx.tx);
+    const erc20TokenInstance = await erc20contract.deploy({data: erc20token.bytecode}).send({
+      from: ctx.accounts[1],
+      gas: 1000000,
+      gasPrice: '30000000000000'
+    });
+
+
+    ctx.tx = await erc20TokenInstance.methods.transfer(ctx.accounts[0], 1000).send({from: ctx.accounts[1]});
+
+    let rawTx = await ctx.web3.eth.getTransaction(ctx.tx.transactionHash);
+    let rawTxReceipt = await ctx.web3.eth.getTransactionReceipt(ctx.tx.transactionHash);
 
     const toSaveTx = {
       _id: rawTx.hash,
@@ -95,30 +99,16 @@ module.exports = (ctx) => {
 
     rawTx.logs = rawTxReceipt.logs;
 
-    let balanceToken = await erc20TokenInstance.balanceOf.call(ctx.accounts[0]);
-
+    let balanceToken = await erc20TokenInstance.methods.balanceOf(ctx.accounts[0]).call();
     const balances = await getUpdatedBalance(ctx.accounts[0], rawTx);
 
     expect(balances.balance).to.eq(balance.toString());
-    expect(_.find(balances.tokens, {address:erc20TokenInstance.address}).balance).to.eq(balanceToken.toString());
+    expect(_.find(balances.tokens, {address:erc20TokenInstance.options.address.toLowerCase()}).balance).to.eq(balanceToken.toString());
   });
 
   it('validate transferEventToQueryConverter function', async ()=>{
 
-
-    let rawTxReceipt = await Promise.promisify(ctx.web3.eth.getTransactionReceipt)(ctx.tx.tx);
-    const log = rawTxReceipt.logs[0];
-
-    const transferEvent = JSON.parse(JSON.stringify(_.find(ctx.tx.logs, {event: 'Transfer'})));
-    transferEvent.args = _.chain(transferEvent.args)
-      .toPairs()
-      .map((pair, index)=>{
-        return [pair[0], log.topics[index + 1] || log.data];
-      })
-      .fromPairs()
-      .value();
-
-    const query = transferEventToQueryConverter(transferEvent.args);
+    const query = transferEventToQueryConverter({from: ctx.accounts[1], to: ctx.accounts[0], value: 1000..toString(16)});
 
     const logExist = await models.txLogModel.count(query);
     expect(logExist).to.eq(1);

@@ -21,7 +21,7 @@ const main = async () => {
               return;
             const content = JSON.parse(msg.content);
             const version = content.version;
-            await channel.publish(config.systemRabbit.exchange, `${config.systemRabbit.serviceName}.${k}.checked`, new Buffer(JSON.stringify({version})));
+            await channel.publish(config.systemRabbit.exchange, `${config.systemRabbit.serviceName}.${k}.checked`, Buffer.from(JSON.stringify({version})));
       });
     });
 };

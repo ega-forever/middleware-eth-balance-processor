@@ -9,6 +9,7 @@ const models = require('../../models'),
   _ = require('lodash'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
+  RMQTxModel = require('middleware-common-components/models/rmq/eth/txModel'),
   spawn = require('child_process').spawn;
 
 module.exports = (ctx) => {
@@ -36,16 +37,36 @@ module.exports = (ctx) => {
   it('validate balance processor update balance ability', async () => {
 
 
-    let txHash = await Promise.promisify(ctx.web3.eth.sendTransaction)({
+    let txReceipt = await ctx.web3.eth.sendTransaction({
       from: ctx.accounts[0],
       to: ctx.accounts[1],
       value: 1000
     });
-    let tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
+
+
+    let tx = await ctx.web3.eth.getTransaction(txReceipt.transactionHash);
+
+    let transformedTransaction = {
+      hash: tx.hash,
+      blockNumber: tx.blockNumber,
+      blockHash: tx.blockHash,
+      transactionIndex: tx.transactionIndex,
+      from: tx.from ? tx.from.toLowerCase() : null,
+      to: tx.to ? tx.to.toLowerCase() : null,
+      gas: tx.gas.toString(),
+      gasPrice: tx.gasPrice.toString(),
+      gasUsed: txReceipt.gasUsed ? txReceipt.gasUsed.toString() : '21000',
+      logs: tx.logs,
+      nonce: tx.nonce,
+      value: tx.value
+    };
+
+
+    new RMQTxModel(transformedTransaction);
 
     await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_fuzz.balance`, {autoDelete: true});
     await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_fuzz.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[0]}`);
-    await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, new Buffer(JSON.stringify(tx)));
+    await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, Buffer.from(JSON.stringify(transformedTransaction)));
 
     await new Promise((res) => {
       ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_fuzz.balance`, async data => {
@@ -67,7 +88,7 @@ module.exports = (ctx) => {
     expect(parseInt(account.balance)).to.be.above(0);
   });
 
-/*
+
   it('kill balance processor', async () => {
     ctx.balanceProcessorPid.kill();
   });
@@ -75,14 +96,35 @@ module.exports = (ctx) => {
   it('send notification and restart balance processor', async () => {
     let account = await models.accountModel.findOne({address: ctx.accounts[0]});
 
-    let txHash = await Promise.promisify(ctx.web3.eth.sendTransaction)({
+
+    let txReceipt = await ctx.web3.eth.sendTransaction({
       from: ctx.accounts[0],
       to: ctx.accounts[1],
       value: 1000
     });
-    let tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
 
-    await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, new Buffer(JSON.stringify(tx)));
+
+    let tx = await ctx.web3.eth.getTransaction(txReceipt.transactionHash);
+
+    let transformedTransaction = {
+      hash: tx.hash,
+      blockNumber: tx.blockNumber,
+      blockHash: tx.blockHash,
+      transactionIndex: tx.transactionIndex,
+      from: tx.from ? tx.from.toLowerCase() : null,
+      to: tx.to ? tx.to.toLowerCase() : null,
+      gas: tx.gas.toString(),
+      gasPrice: tx.gasPrice.toString(),
+      gasUsed: txReceipt.gasUsed ? txReceipt.gasUsed.toString() : '21000',
+      logs: tx.logs,
+      nonce: tx.nonce,
+      value: tx.value
+    };
+
+
+    new RMQTxModel(transformedTransaction);
+
+    await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, Buffer.from(JSON.stringify(tx)));
 
 
     ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
@@ -90,7 +132,7 @@ module.exports = (ctx) => {
     let accountUpdated = await models.accountModel.findOne({address: ctx.accounts[0]});
     expect(account.balance).to.not.eq(accountUpdated.balance);
   });
-*/
+
 
   after(async () => {
     ctx.balanceProcessorPid.kill();

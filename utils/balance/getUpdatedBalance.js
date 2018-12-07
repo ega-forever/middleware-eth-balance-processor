@@ -22,7 +22,7 @@ module.exports = async (address, tx) => {
 
   const web3 = await providerService.get();
 
-  const Erc20Contract = web3.eth.contract(erc20tokenDefinition.abi);
+  const Erc20Contract = new web3.eth.Contract(erc20tokenDefinition.abi);
   const balances = {};
 
   const query = transferEventToQueryConverter(tx ? {} : {
@@ -30,27 +30,29 @@ module.exports = async (address, tx) => {
   });
 
   let tokens = tx ? _.chain(tx)
-      .get('logs', [])
-      .filter({signature: query.signature})
-      .map(log => log.address)
-      .uniq()
-      .value() :
+    .get('logs', [])
+    .filter({signature: query.signature})
+    .map(log => log.address)
+    .uniq()
+    .value() :
     await models.txLogModel.distinct('address', query);
 
   balances.tokens = await Promise.mapSeries(tokens, async token => {
-    const contractInstance = Erc20Contract.at(token);
-    let balance = await Promise.promisify(contractInstance.balanceOf.call)(address);
-    let symbol = await Promise.promisify(contractInstance.symbol.call)();
-    let decimals = await Promise.promisify(contractInstance.decimals.call)().catch(() => '18');
+
+    Erc20Contract.options.address = token;
+
+    let balance = await Erc20Contract.methods.balanceOf(address).call();
+    let symbol = await Erc20Contract.methods.symbol().call();
+    let decimals = await Erc20Contract.methods.decimals().call().catch(() => '18');
 
     return {
       symbol: symbol,
       decimals: decimals.toString(),
-      address: token,
+      address: token.toLowerCase(),
       balance: balance.toString()
     };
   });
 
-  balances.balance = (await Promise.promisify(web3.eth.getBalance)(address)).toString();
+  balances.balance = await web3.eth.getBalance(address);
   return balances;
 };

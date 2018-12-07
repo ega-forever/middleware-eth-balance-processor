@@ -15,6 +15,8 @@ const config = require('../config'),
   fuzzTests = require('./fuzz'),
   performanceTests = require('./performance'),
   featuresTests = require('./features'),
+  fs = require('fs-extra'),
+  path = require('path'),
   blockTests = require('./blocks'),
   Promise = require('bluebird'),
   mongoose = require('mongoose'),
@@ -32,6 +34,8 @@ describe('core/balanceProcessor', function () {
   before(async () => {
     models.init();
 
+    await fs.remove(path.join(__dirname, 'utils/node/testrpc_db'));
+
     ctx.nodePid = spawn('node', ['--max_old_space_size=4096', 'tests/utils/node/ipcConverter.js'], {
       env: process.env,
       stdio: 'ignore'
@@ -41,12 +45,12 @@ describe('core/balanceProcessor', function () {
       process.exit(1);
     });
 
-    const provider = /http:\/\//.test(config.web3.providers[0]) ?
-      new Web3.providers.HttpProvider(config.web3.providers[0]) :
-      new Web3.providers.IpcProvider(`${/^win/.test(process.platform) ? '\\\\.\\pipe\\' : ''}${config.web3.providers[0]}`, net);
+    ctx.web3 = (/^http/.test(config.web3.providers[0]) || /^ws/.test(config.web3.providers[0])) ?
+      new Web3(config.web3.providers[0]) :
+      new Web3(`${/^win/.test(process.platform) ? '\\\\.\\pipe\\' : ''}${config.web3.providers[0]}`, net);
 
-    ctx.web3 = new Web3(provider);
-    ctx.accounts = await Promise.promisify(ctx.web3.eth.getAccounts)();
+    ctx.accounts = await ctx.web3.eth.getAccounts();
+    ctx.accounts = ctx.accounts.map(account => account.toLowerCase());
 
 
     ctx.amqp = {};
@@ -58,7 +62,7 @@ describe('core/balanceProcessor', function () {
     await ctx.amqp.channel.bindQueue(`${config.rabbit.serviceName}_current_provider.get`, 'internal', `${config.rabbit.serviceName}_current_provider.get`);
 
     ctx.amqp.channel.consume(`${config.rabbit.serviceName}_current_provider.get`, async () => {
-      ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: 0})));
+      ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, Buffer.from(JSON.stringify({index: 0})));
     }, {noAck: true, autoDelete: true});
 
     await providerService.setRabbitmqChannel(ctx.amqp.channel, config.rabbit.serviceName);
@@ -79,10 +83,10 @@ describe('core/balanceProcessor', function () {
 
   describe('block', () => blockTests(ctx));
 
-
   describe('fuzz', () => fuzzTests(ctx));
 
   describe('features', () => featuresTests(ctx));
+
   describe('performance', () => performanceTests(ctx));
 
 });

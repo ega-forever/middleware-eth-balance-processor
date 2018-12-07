@@ -6,12 +6,9 @@
 
 const models = require('../../models'),
   _ = require('lodash'),
-  contract = require('truffle-contract'),
   erc20token = require('../../contracts/TokenContract.json'),
-  erc20contract = contract(erc20token),
   Promise = require('bluebird'),
   crypto = require('crypto'),
-  memwatch = require('memwatch-next'),
   getUpdatedBalance = require('../../utils/balance/getUpdatedBalance'),
   transferEventToQueryConverter = require('../../utils/converters/transferEventToQueryConverter'),
   expect = require('chai').expect;
@@ -27,28 +24,34 @@ module.exports = (ctx) => {
     await models.accountModel.create({
       address: ctx.accounts[0],
       balance: 0,
-      erc20token: {},
+      erc20token: [],
       isActive: true
     });
 
   });
 
   it('generate erc20 transfers', async () => {
-    const balance = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[0]);
-    expect(parseInt(balance.toString())).to.be.gt(0);
-
-    erc20contract.setProvider(ctx.web3.currentProvider);
+    const balance = await ctx.web3.eth.getBalance(ctx.accounts[0]);
+    expect(parseInt(balance)).to.be.gt(0);
 
     for (let s = 0; s < 10; s++) {
-      const erc20TokenInstance = await erc20contract.new({from: ctx.accounts[1], gas: 1000000});
+
+      const erc20contract = new ctx.web3.eth.Contract(erc20token.abi);
+
+      const erc20TokenInstance = await erc20contract.deploy({data: erc20token.bytecode}).send({
+        from: ctx.accounts[1],
+        gas: 1000000,
+        gasPrice: '30000000000000'
+      });
+
       await Promise.delay(1000);
 
       for (let i = 0; i < 10; i++) {
 
-        const tx = await erc20TokenInstance.transfer(ctx.accounts[0], 1000, {from: ctx.accounts[1]});
+        const tx = await erc20TokenInstance.methods.transfer(ctx.accounts[0], 1000).send({from: ctx.accounts[1]});
 
-        let rawTx = await Promise.promisify(ctx.web3.eth.getTransaction)(tx.tx);
-        let rawTxReceipt = await Promise.promisify(ctx.web3.eth.getTransactionReceipt)(tx.tx);
+        let rawTx = await ctx.web3.eth.getTransaction(tx.transactionHash);
+        let rawTxReceipt = await ctx.web3.eth.getTransactionReceipt(tx.transactionHash);
 
         const toSaveTx = {
           _id: rawTx.hash,

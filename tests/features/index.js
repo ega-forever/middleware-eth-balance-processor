@@ -10,9 +10,8 @@ const models = require('../../models'),
   config = require('../../config'),
   crypto = require('crypto'),
   _ = require('lodash'),
-  contract = require('truffle-contract'),
   erc20token = require('../../contracts/TokenContract.json'),
-  erc20contract = contract(erc20token),
+  RMQTxModel = require('middleware-common-components/models/rmq/eth/txModel'),
   spawn = require('child_process').spawn,
   expect = require('chai').expect,
   Promise = require('bluebird');
@@ -25,7 +24,7 @@ module.exports = (ctx) => {
     await models.accountModel.remove({});
     await ctx.amqp.channel.deleteQueue(`${config.rabbit.serviceName}.balance_processor`);
 
-    ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
+    ctx.balanceProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'inherit'});
     await Promise.delay(5000);
 
     for (let address of _.take(ctx.accounts, 2))
@@ -38,34 +37,46 @@ module.exports = (ctx) => {
 
   });
 
+
   it('validate balance change on tx arrive', async () => {
 
     let tx;
     let balance0;
     let balance1;
+
     await Promise.all([
       (async () => {
-        let txHash = await Promise.promisify(ctx.web3.eth.sendTransaction)({
+        let txReceipt = await ctx.web3.eth.sendTransaction({
           from: ctx.accounts[0],
           to: ctx.accounts[1],
           value: 1000
         });
-        tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
 
-        await new Promise(res => {
-          let intervalPid = setInterval(async () => {
-            tx = await Promise.promisify(ctx.web3.eth.getTransaction)(txHash);
-            if (tx.blockNumber) {
-              clearInterval(intervalPid);
-              res();
-            }
-          }, 1000);
-        });
 
-        balance0 = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[0]);
-        balance1 = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[1]);
-        await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, new Buffer(JSON.stringify(tx)));
-        await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[1]}`, new Buffer(JSON.stringify(tx)));
+        tx = await ctx.web3.eth.getTransaction(txReceipt.transactionHash);
+
+        tx = {
+          hash: tx.hash,
+          blockNumber: tx.blockNumber,
+          blockHash: tx.blockHash,
+          transactionIndex: tx.transactionIndex,
+          from: tx.from ? tx.from.toLowerCase() : null,
+          to: tx.to ? tx.to.toLowerCase() : null,
+          gas: tx.gas.toString(),
+          gasPrice: tx.gasPrice.toString(),
+          gasUsed: txReceipt.gasUsed ? txReceipt.gasUsed.toString() : '21000',
+          logs: tx.logs,
+          nonce: tx.nonce,
+          value: tx.value
+        };
+
+
+        new RMQTxModel(tx);
+
+        balance0 = await ctx.web3.eth.getBalance(ctx.accounts[0]);
+        balance1 = await ctx.web3.eth.getBalance(ctx.accounts[1]);
+        await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[0]}`, Buffer.from(JSON.stringify(tx)));
+        await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[1]}`, Buffer.from(JSON.stringify(tx)));
       })(),
       (async () => {
         await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`, {autoDelete: true});
@@ -89,7 +100,7 @@ module.exports = (ctx) => {
 
       })(),
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features2.balance`, {autoDelete:true});
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features2.balance`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features2.balance`, 'events', `${config.rabbit.serviceName}_balance.${ctx.accounts[0]}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features2.balance`, async data => {
@@ -101,6 +112,7 @@ module.exports = (ctx) => {
 
             expect(message.balance).to.eq(balance0.toString());
             expect(message.address).to.eq(ctx.accounts[0]);
+
             expect(_.isEqual(JSON.parse(JSON.stringify(tx)), message.tx)).to.equal(true);
             await ctx.amqp.channel.deleteQueue(`app_${config.rabbit.serviceName}_test_features2.balance`);
             res();
@@ -119,12 +131,12 @@ module.exports = (ctx) => {
       }
     });
 
-    let balance = await Promise.promisify(ctx.web3.eth.getBalance)(ctx.accounts[0]);
+    let balance = await ctx.web3.eth.getBalance(ctx.accounts[0]);
 
     await Promise.all([
       (async () => {
         await Promise.delay(3000);
-        await ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_user.created`, new Buffer(JSON.stringify({address: ctx.accounts[0]})));
+        await ctx.amqp.channel.publish('internal', `${config.rabbit.serviceName}_user.created`, Buffer.from(JSON.stringify({address: ctx.accounts[0]})));
       })(),
       (async () => {
         await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`, {autoDelete: true});
@@ -152,15 +164,25 @@ module.exports = (ctx) => {
 
   it('add new ERC20 token', async () => {
 
-    erc20contract.setProvider(ctx.web3.currentProvider);
-    ctx.erc20TokenInstance = await erc20contract.new({from: ctx.accounts[0], gas: 1000000});
-    let balance = await ctx.erc20TokenInstance.balanceOf.call(ctx.accounts[0]);
-    expect(balance.toNumber()).to.equal(1000000);
+    const balance = await ctx.web3.eth.getBalance(ctx.accounts[0]);
+    expect(parseInt(balance.toString())).to.be.gt(0);
 
-    let tx = await ctx.erc20TokenInstance.transfer(ctx.accounts[1], 1000, {from: ctx.accounts[0]});
+    const erc20contract = new ctx.web3.eth.Contract(erc20token.abi);
 
-    let rawTx = await Promise.promisify(ctx.web3.eth.getTransaction)(tx.tx);
-    let rawTxReceipt = await Promise.promisify(ctx.web3.eth.getTransactionReceipt)(tx.tx);
+    const erc20TokenInstance = await erc20contract.deploy({data: erc20token.bytecode}).send({
+      from: ctx.accounts[0],
+      gas: 1000000,
+      gasPrice: '30000000000000'
+    });
+
+    let tokenBalance = await erc20TokenInstance.methods.balanceOf(ctx.accounts[0]).call();
+    expect(tokenBalance).to.equal('1000000');
+
+    let tx = await erc20TokenInstance.methods.transfer(ctx.accounts[1], 1000).send({from: ctx.accounts[0]});
+
+
+    let rawTx = await ctx.web3.eth.getTransaction(tx.transactionHash);
+    let rawTxReceipt = await ctx.web3.eth.getTransactionReceipt(tx.transactionHash);
 
     const toSaveTx = {
       _id: rawTx.hash,
@@ -176,13 +198,7 @@ module.exports = (ctx) => {
 
     await models.txModel.create(toSaveTx);
 
-    rawTxReceipt.logs = rawTxReceipt.logs.map(log => {
-      if (log.topics.length)
-        log.signature = log.topics[0];
-      return log;
-    });
-
-    const logsToSave = rawTxReceipt.logs.map(log => {
+    const logsToSave = _.chain(rawTxReceipt.logs).cloneDeep().map(log => {
 
       let args = log.topics;
       let nonIndexedLogs = _.chain(log.data.replace('0x', '')).chunk(64).map(chunk => chunk.join('')).value();
@@ -202,24 +218,64 @@ module.exports = (ctx) => {
         signature: _.get(log, 'topics.0'),
         args: log.topics,
         dataIndexStart: dataIndexStart,
-        address: log.address
+        address: log.address.toLowerCase()
       });
 
       txLog._id = crypto.createHash('md5').update(`${rawTx.blockNumber}x${log.transactionIndex}x${log.logIndex}`).digest('hex');
       return txLog;
-    });
+    }).value();
 
     for (let log of logsToSave)
       await models.txLogModel.create(log);
 
-    rawTx.logs = rawTxReceipt.logs;
+    let balanceAccount1 = await erc20TokenInstance.methods.balanceOf(ctx.accounts[1]).call();
 
-    let balanceAccount1 = await ctx.erc20TokenInstance.balanceOf.call(ctx.accounts[1]);
+    const transformedLogs = _.chain(rawTxReceipt.logs).cloneDeep().map(log => {
+
+      let args = log.topics;
+      let nonIndexedLogs = _.chain(log.data.replace('0x', '')).chunk(64).map(chunk => chunk.join('')).value();
+      let dataIndexStart;
+
+      if (args.length && nonIndexedLogs.length) {
+        dataIndexStart = args.length;
+        args.push(...nonIndexedLogs);
+      }
+
+      return {
+        blockNumber: rawTx.blockNumber,
+        txIndex: log.transactionIndex,
+        index: log.logIndex,
+        removed: log.removed || 0,
+        signature: _.get(log, 'topics.0'),
+        args: log.topics,
+        dataIndexStart: dataIndexStart,
+        address: log.address.toLowerCase()
+      };
+
+    }).value();
+
+
+    let transformedTransaction = {
+      hash: rawTx.hash,
+      blockNumber: rawTx.blockNumber,
+      blockHash: rawTx.blockHash,
+      transactionIndex: rawTx.transactionIndex,
+      from: rawTx.from ? rawTx.from.toLowerCase() : null,
+      to: rawTx.to ? rawTx.to.toLowerCase() : null,
+      gas: rawTx.gas.toString(),
+      gasPrice: rawTx.gasPrice.toString(),
+      gasUsed: rawTxReceipt.gasUsed ? rawTxReceipt.gasUsed.toString() : '21000',
+      logs: transformedLogs,
+      nonce: rawTx.nonce,
+      value: rawTx.value
+    };
+
+    new RMQTxModel(transformedTransaction);
 
     await Promise.all([
       (async () => {
         await Promise.delay(3000);
-        await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[1]}`, new Buffer(JSON.stringify(rawTx)));
+        await ctx.amqp.channel.publish('events', `${config.rabbit.serviceName}_transaction.${ctx.accounts[1]}`, Buffer.from(JSON.stringify(transformedTransaction)));
       })(),
       (async () => {
         await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.balance`, {autoDelete: true});
@@ -232,8 +288,12 @@ module.exports = (ctx) => {
 
             const message = JSON.parse(data.content.toString());
 
-            expect(_.isEqual(JSON.parse(JSON.stringify(rawTx)), message.tx)).to.equal(true);
-            expect(_.find(message.erc20token, {address: ctx.erc20TokenInstance.address}).balance).to.eq(balanceAccount1.toString());
+            expect(transformedTransaction).to.deep.equal(message.tx);
+
+            //console.log(message);
+            //console.log(erc20TokenInstance.options.address.toLowerCase())
+
+            expect(_.find(message.erc20token, {address: erc20TokenInstance.options.address.toLowerCase()}).balance).to.eq(balanceAccount1.toString());
             expect(message.address).to.eq(ctx.accounts[1]);
 
             await ctx.amqp.channel.deleteQueue(`app_${config.rabbit.serviceName}_test_features.balance`);
@@ -247,7 +307,7 @@ module.exports = (ctx) => {
 
 
   after(() => {
-    delete ctx.erc20TokenInstance;
+    ctx.balanceProcessorPid.kill();
   });
 
 };
